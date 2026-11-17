@@ -61,6 +61,13 @@ jobs:
           npm ci --no-audit --no-fund
           npx playwright install --with-deps chromium
 
+      - name: Restore OSM seamarks of the last successful run (used only if both OSM sources fail)
+        uses: actions/cache/restore@v4
+        with:
+          path: work/osm-last
+          key: osm-last-${{ github.run_id }}
+          restore-keys: osm-last-
+
       - name: Fetch sources (in parallel)
         shell: bash
         run: |
@@ -78,6 +85,13 @@ jobs:
           done
           df -h .
           exit $fail
+
+      - name: Save OSM seamarks for later runs
+        if: always() && hashFiles('work/osm-last/seamark.geojsonl') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: work/osm-last
+          key: osm-last-${{ github.run_id }}
 
       # One step per build stage, so the Actions view shows where time goes
       - name: "Build: areas"

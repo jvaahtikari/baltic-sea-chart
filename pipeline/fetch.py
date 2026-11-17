@@ -223,7 +223,36 @@ def element_feature(el):
     return {"type": "Feature", "properties": tags, "geometry": geom}
 
 
+OSM_LAST = C.WORK / "osm-last" / "seamark.geojsonl"   # kept between runs by the workflow cache
+
+
 def step_osm():
+    """OpenStreetMap seamarks: Overpass API, then the Geofabrik extracts, and if both are unreachable
+    the seamarks of the last successful run (the run log says so)."""
+    try:
+        step_osm_overpass()
+    except RuntimeError as e:
+        print("Overpass failed (%s), falling back to Geofabrik extracts" % e, flush=True)
+        try:
+            step_osm_geofabrik()
+        except Exception as e2:  # noqa: BLE001
+            if not OSM_LAST.exists():
+                raise
+            print("Geofabrik failed too (%s); using the seamarks of the last successful run" % e2, flush=True)
+            out = RAW / "osm" / "seamark.geojsonl"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(OSM_LAST, out)
+            prev = OSM_LAST.with_name("log.json")
+            info = json.loads(prev.read_text()) if prev.exists() else {}
+            log_step("osm", source="previous run (both OSM sources unreachable)", previous=info,
+                     licence="ODbL 1.0, © OpenStreetMap contributors", stale=True)
+            return
+    OSM_LAST.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy(RAW / "osm" / "seamark.geojsonl", OSM_LAST)
+    shutil.copy(RAW / "osm" / "log.json", OSM_LAST.with_name("log.json"))
+
+
+def step_osm_overpass():
     """OpenStreetMap seamark objects (OpenSeaMap tagging) for the area, from the Overpass API."""
     d = RAW / "osm"
     d.mkdir(parents=True, exist_ok=True)
@@ -234,28 +263,24 @@ def step_osm():
     xs = [x0 + (x1 - x0) * k / n_slices for k in range(n_slices + 1)]
     ys = [y0 + (y1 - y0) * k / n_slices for k in range(n_slices + 1)]
     seen, n, servers = set(), 0, set()
-    try:
-        with open(out, "w", encoding="utf-8") as f:
-            for i in range(n_slices):
-                for j in range(n_slices):
-                    bb = "%.4f,%.4f,%.4f,%.4f" % (ys[j], xs[i], ys[j + 1], xs[i + 1])
-                    q = '[out:json][timeout:300];(node["seamark:type"](%s);way["seamark:type"](%s););out geom;' % (bb, bb)
-                    server, els = overpass(q)
-                    servers.add(server)
-                    for el in els:
-                        key = (el["type"], el["id"])
-                        if key in seen:
-                            continue
-                        seen.add(key)
-                        ft = element_feature(el)
-                        if ft:
-                            f.write(json.dumps(ft, ensure_ascii=False, separators=(",", ":")) + "\n")
-                            n += 1
-        log_step("osm", source="Overpass API", servers=sorted(servers), features=n,
-                 licence="ODbL 1.0, © OpenStreetMap contributors")
-    except RuntimeError as e:
-        print("Overpass failed (%s), falling back to Geofabrik extracts" % e, flush=True)
-        step_osm_geofabrik()
+    with open(out, "w", encoding="utf-8") as f:
+        for i in range(n_slices):
+            for j in range(n_slices):
+                bb = "%.4f,%.4f,%.4f,%.4f" % (ys[j], xs[i], ys[j + 1], xs[i + 1])
+                q = '[out:json][timeout:300];(node["seamark:type"](%s);way["seamark:type"](%s););out geom;' % (bb, bb)
+                server, els = overpass(q)
+                servers.add(server)
+                for el in els:
+                    key = (el["type"], el["id"])
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    ft = element_feature(el)
+                    if ft:
+                        f.write(json.dumps(ft, ensure_ascii=False, separators=(",", ":")) + "\n")
+                        n += 1
+    log_step("osm", source="Overpass API", servers=sorted(servers), features=n,
+             licence="ODbL 1.0, © OpenStreetMap contributors")
 
 
 def step_osm_geofabrik():
