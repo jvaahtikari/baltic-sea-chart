@@ -30,7 +30,7 @@ def log_step(step, **info):
     print("[%s] %s" % (step, json.dumps(info, ensure_ascii=False)[:600]), flush=True)
 
 
-def http_get(url, dest=None, tries=5, timeout=600):
+def http_get(url, dest=None, tries=8, timeout=600):
     """GET with retries. Returns bytes (dest None) or writes to dest and returns its size."""
     last = None
     for i in range(tries):
@@ -46,7 +46,7 @@ def http_get(url, dest=None, tries=5, timeout=600):
                 return dest.stat().st_size
         except Exception as e:  # noqa: BLE001 - network errors of every kind are retried
             last = e
-            wait = 5 * (i + 1) ** 2
+            wait = min(120, 5 * (i + 1) ** 2)   # up to ~10 minutes in all: brief network outages do happen
             print("  retry %d/%d in %ds: %s (%s)" % (i + 1, tries, wait, url[:160], e), flush=True)
             time.sleep(wait)
     raise RuntimeError("download failed: %s: %s" % (url, last))
