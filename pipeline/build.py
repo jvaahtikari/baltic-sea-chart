@@ -122,11 +122,15 @@ def step_areas():
     iho = union_of(read_geojson(d / "iho.geojson")).intersection(frame)
     excluded = unary_union([union_of(read_geojson(p)) for p in sorted(d.glob("excluded_*.geojson"))]).intersection(frame)
     fi = unary_union([union_of(read_geojson(p)) for p in sorted(d.glob("fi_*.geojson"))]).intersection(frame)
+    ee = unary_union([union_of(read_geojson(p)) for p in sorted(d.glob("ee_*.geojson"))]).intersection(frame)
+    de = unary_union([union_of(read_geojson(p)) for p in sorted(d.glob("de_*.geojson"))]).intersection(frame)
     # Simplify before buffering: the buffer is wide, so detail below ~1 km does not matter, and
     # buffering the full-detail coastline takes many minutes.
     aoi = iho.simplify(0.01).buffer(C.AOI_BUFFER_DEG, 4).intersection(frame).difference(excluded)
     fi_zone = fi.simplify(0.002).buffer(0.005, 4).intersection(aoi)
-    areas = {"aoi": aoi, "excluded": excluded, "fi_zone": fi_zone, "iho": iho}
+    ee_zone = ee.simplify(0.002).buffer(0.005, 4).intersection(aoi).difference(fi_zone) if not ee.is_empty else ee
+    de_zone = de.simplify(0.002).buffer(0.005, 4).intersection(aoi) if not de.is_empty else de
+    areas = {"aoi": aoi, "excluded": excluded, "fi_zone": fi_zone, "ee_zone": ee_zone, "de_zone": de_zone, "iho": iho}
     (MID).mkdir(parents=True, exist_ok=True)
     (MID / "areas.json").write_text(json.dumps({k: shapely.to_wkb(v, hex=True) for k, v in areas.items()}))
     w = Writer("nodata")
@@ -639,6 +643,74 @@ def step_marks():
             for leg in legs:
                 w_sect.add(leg, {"colour": col, "part": "limit", "src": "fi"}, minzoom=13)
 
+    # --- Estonia: Transpordiamet aids to navigation register (names carry the type; no light data)
+    ee_zone = A.get("ee_zone")
+    if ee_zone is not None and not ee_zone.is_empty:
+        shapely.prepare(ee_zone)
+    n_ee = 0
+    for layer in ("Beacon", "Buoy"):
+        p_ = RAW / "estonia" / (layer + ".geojsonl")
+        if not p_.exists():
+            continue
+        for ft in read_seq(p_):
+            pt = point_of(ft)
+            if pt is None or not ok(pt.x, pt.y):
+                continue
+            name = ft["properties"].get("geographicalname_geographicalname_spelling_spellingofname_text")
+            kind, cat = estonian_mark(name, layer)
+            w_mark.add(pt, {"kind": kind, "cat": cat, "name": name, "ref": ft["properties"].get("inspireid_identifier_localid"),
+                            "src": "ee"}, minzoom=mark_minzoom(kind))
+            n_ee += 1
+    LOG["estonia_marks"] = n_ee
+    use_ee = n_ee > 0 and ee_zone is not None and not ee_zone.is_empty
+
+    # --- Germany: BSH navigation marks and lights (S-57 attributes)
+    de_zone = A.get("de_zone")
+    if de_zone is not None and not de_zone.is_empty:
+        shapely.prepare(de_zone)
+    gd = RAW / "germany"
+    n_de = n_de_l = 0
+    for cl in DE_CLASS_KIND:
+        pm = gd / ("%s_%s.geojsonl" % (cl, cl.lower()))
+        pl = gd / ("%s_lights.geojsonl" % cl)
+        lit_at = set()
+        if pl.exists():
+            for ft in read_seq(pl):
+                pt = point_of(ft)
+                if pt is None or not aoi.contains(pt) or not ok(pt.x, pt.y):
+                    continue
+                p = ft["properties"]
+                cols = s57_colours(p.get("colour"))
+                lbl = light_label(s57_litchr(p.get("litchr")) + (p.get("siggrp") or "").replace("()", "").replace("(1)", ""), cols,
+                                  p.get("sigper"))
+                major = (num(p.get("valnmr")) or 0) >= 15
+                w_light.add(pt, {"label": lbl, "colour": "".join(cols) or "W", "height": num(p.get("height")),
+                                 "range": num(p.get("valnmr")), "major": major, "src": "de"}, minzoom=8 if major else 10)
+                s1, s2 = num(p.get("sectr1")), num(p.get("sectr2"))
+                if s1 is not None and s2 is not None:
+                    arc, legs = sector_geoms(pt.x, pt.y, s1, s2)
+                    w_sect.add(arc, {"colour": cols[0] if cols else "W", "part": "arc", "src": "de"}, minzoom=12)
+                    for leg in legs:
+                        w_sect.add(leg, {"colour": cols[0] if cols else "W", "part": "limit", "src": "de"}, minzoom=13)
+                lit_at.add((round(pt.x, 5), round(pt.y, 5)))
+                n_de_l += 1
+        if not pm.exists():
+            continue
+        for ft in read_seq(pm):
+            pt = point_of(ft)
+            if pt is None or not aoi.contains(pt) or not ok(pt.x, pt.y):
+                continue
+            p = ft["properties"]
+            lit = (round(pt.x, 5), round(pt.y, 5)) in lit_at
+            kind, cat = s57_mark(cl, p, lit)
+            if kind is None:
+                continue
+            w_mark.add(pt, {"kind": kind, "cat": cat, "name": p.get("objnam"), "lit": lit, "src": "de"},
+                       minzoom=mark_minzoom(kind))
+            n_de += 1
+    LOG["germany_marks"], LOG["germany_lights"] = n_de, n_de_l
+    use_de = n_de > 0 and de_zone is not None and not de_zone.is_empty
+
     # --- OpenStreetMap seamarks (outside Finnish waters for marks and lights, everywhere for hazards)
     for ft in read_seq(RAW / "osm" / "seamark.geojsonl"):
         g = shape(ft["geometry"]) if ft.get("geometry") else None
@@ -660,9 +732,9 @@ def step_marks():
         lit, label, cols, secs = osm_lights(tags)
         if kind is None and not lit:
             continue
-        if fi_zone.contains(pt) or not ok(lon, lat):
+        if fi_zone.contains(pt) or (use_de and de_zone.contains(pt)) or not ok(lon, lat):
             continue
-        if kind is not None:
+        if kind is not None and not (use_ee and ee_zone.contains(pt)):
             w_mark.add(pt, {"kind": kind, "cat": osm_category(t, tags), "name": name,
                             "ref": tags.get("seamark:light:reference") or tags.get("seamark:reference"),
                             "lit": lit, "topmark": any(k.startswith("seamark:topmark") for k in tags), "src": "osm"},
@@ -692,6 +764,92 @@ def point_of(ft):
     if g.geom_type == "MultiPoint":
         g = g.geoms[0]
     return g if g.geom_type == "Point" else g.representative_point()
+
+
+EE_CARDINAL = {"põhja": "north", "lõuna": "south", "ida": "east", "lääne": "west"}
+
+# S-57 codes used by the BSH data
+DE_CLASS_KIND = {"BOYLAT": "lat", "BOYCAR": "car", "BOYISD": "isolated_danger", "BOYSAW": "safe_water",
+                 "BOYSPP": "special", "BCNLAT": "lat", "BCNCAR": "car", "BCNISD": "isolated_danger",
+                 "BCNSPP": "special", "LNDMRK": "landmark"}
+S57_COLOUR = {"1": "W", "3": "R", "4": "G", "5": "Bu", "6": "Y", "11": "Or", "12": "Mag"}
+S57_LITCHR = {"1": "F", "2": "Fl", "3": "LFl", "4": "Q", "5": "VQ", "6": "UQ", "7": "Iso", "8": "Oc", "9": "IQ",
+              "10": "IVQ", "11": "IUQ", "12": "Mo", "13": "FFl", "14": "Fl+LFl", "15": "OcFl", "16": "FLFl",
+              "17": "Al.Oc", "18": "Al.LFl", "19": "Al.Fl", "20": "Al.Gr", "25": "Q+LFl", "26": "VQ+LFl",
+              "27": "UQ+LFl", "28": "Al", "29": "Al.FFl"}
+
+
+def s57_colours(v):
+    out = []
+    for c in str(v or "").split(","):
+        c = S57_COLOUR.get(c.strip())
+        if c and c not in out:
+            out.append(c)
+    return out
+
+
+def s57_litchr(v):
+    return S57_LITCHR.get(str(v or "").strip(), "")
+
+
+def s57_mark(cl, p, lit):
+    """(kind, IALA category) for a BSH S-57 object."""
+    t = DE_CLASS_KIND[cl]
+    if cl == "LNDMRK":
+        if not lit:
+            return None, None          # towers, churches etc. without a light are not chart aids here
+        return "lighthouse", "none"
+    if cl.startswith("BOY"):
+        kind = "spar" if str(p.get("boyshp")) in ("4", "5") else "buoy"
+    else:
+        kind = "beacon"
+    if t == "lat":
+        c = str(p.get("catlam") or "")
+        cat = {"1": "port", "2": "starboard", "3": "port", "4": "starboard"}.get(c, "none")
+    elif t == "car":
+        cat = {"1": "north", "2": "east", "3": "south", "4": "west"}.get(str(p.get("catcam") or ""), "none")
+    else:
+        cat = t
+    return kind, cat
+
+
+def estonian_mark(name, layer):
+    """Type and IALA category of an Estonian aid from its official name (the register's WFS has no
+    separate type fields). Examples: 'Sillamäe sadama parema külje poi' = starboard buoy,
+    'Keri lõunatooder' = south cardinal spar, 'Kunda teljepoi' = safe water buoy,
+    'Miiduranna vraki eraldiasuva ohu tooder' = isolated danger, 'Kunda sihi alumine tulepaak' = front
+    leading light, 'Uhtju tulepaagi radarivastaja' = racon, 'Narva-Jõesuu tuletorn' = lighthouse."""
+    n = (name or "").lower()
+    if layer == "Buoy":
+        kind = "spar" if "tooder" in n else "buoy"
+    elif "radarivastaja" in n:
+        kind = "racon"
+    elif "sihi" in n or "siht" in n:
+        kind = "leading_mark"
+    elif "tuletorn" in n:
+        kind = "lighthouse"
+    elif "tulepaak" in n:
+        kind = "light"
+    elif "päevamärk" in n:
+        kind = "daymark"
+    else:
+        kind = "beacon"
+    cat = "none"
+    if "parema" in n:
+        cat = "starboard"
+    elif "vasaku" in n:
+        cat = "port"
+    else:
+        m = re.search(r"(põhja|lõuna|ida|lääne)(poi|tooder)", n)
+        if m:
+            cat = EE_CARDINAL[m.group(1)]
+        elif re.search(r"eraldiasuva ohu|ohu ?(poi|tooder)|üksikohu", n):
+            cat = "isolated_danger"
+        elif re.search(r"telje ?(poi|tooder)|telg", n):
+            cat = "safe_water"
+        elif re.search(r"eri ?(poi|tooder)|piirirežiimi", n):
+            cat = "special"
+    return kind, cat
 
 
 def mark_minzoom(kind):
@@ -739,6 +897,19 @@ def step_routes():
             continue
         p = ft["properties"]
         w_lead.add(g, {"bearing": num(p.get("suunta")), "src": "fi"}, minzoom=10)
+
+    ed = RAW / "estonia"
+    nm = "geographicalname_geographicalname_spelling_spellingofname_text"
+    if (ed / "FairwayArea.geojsonl").exists():
+        for ft in read_seq(ed / "FairwayArea.geojsonl"):
+            g = clip(shape(ft["geometry"])) if ft.get("geometry") else None
+            if g is not None:
+                w_fw.add(g, {"kind": "fairway", "name": ft["properties"].get(nm), "src": "ee"}, minzoom=9)
+    if (ed / "WaterwayLink.geojsonl").exists():
+        for ft in read_seq(ed / "WaterwayLink.geojsonl"):
+            g = clip(shape(ft["geometry"])) if ft.get("geometry") else None
+            if g is not None:
+                w_nav.add(g, {"kind": "fairway", "name": ft["properties"].get(nm), "src": "ee"}, minzoom=10)
 
     for ft in read_seq(RAW / "osm" / "seamark.geojsonl"):
         if not ft.get("geometry") or ft["geometry"]["type"] == "Point":

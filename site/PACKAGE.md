@@ -99,7 +99,7 @@ Features may also carry `minzoom`/`maxzoom`: the zoom range in which the feature
 (already applied when the tiles were made). In Finnish waters EMODnet depths are shown up to zoom 8 and
 Traficom depths from zoom 9.
 
-`src` tells where a feature comes from: `fi` = Väylävirasto, `traficom` = Traficom, `osm` = OpenStreetMap,
+`src` tells where a feature comes from: `fi` = Väylävirasto, `ee` = Transpordiamet (Estonia), `de` = BSH (Germany), `traficom` = Traficom, `osm` = OpenStreetMap,
 `emodnet` = EMODnet Bathymetry.
 
 ## Licences and attribution
@@ -111,6 +111,9 @@ Show the attribution texts of `style.json` (MapLibre's attribution control does 
   separation): ODbL 1.0, © OpenStreetMap contributors. The tiles are a derivative database: if you
   redistribute them, keep them under ODbL.
 - **Väylävirasto** (Finnish seamarks, lights, fairways, navigation lines): CC BY 4.0.
+- **Transpordiamet / Maa- ja Ruumiamet** (Estonian seamarks, fairway areas and sections): Estonian open
+  data licence (CC BY 4.0 equivalent).
+- **BSH** (German seamarks, lights and sectors): GeoNutzV, source note "© BSH"; not for navigation.
 - **Traficom** (Finnish depth areas and contours): not for navigation, non-commercial use only,
   attribution with the month of transfer.
 - **EMODnet Bathymetry** (depths outside Finland): open access with attribution.

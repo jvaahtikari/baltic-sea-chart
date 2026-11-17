@@ -3,7 +3,7 @@ name: Build Baltic Sea chart
 on:
   workflow_dispatch:
   schedule:
-    - cron: "23 3 * * 1"        # every Monday 03:23 UTC: all sources are fetched again from their services
+    - cron: "23 3 * * 1,4"      # Monday and Thursday 03:23 UTC: all sources are fetched again from their services
   push:
     branches: [main]
     paths: ["pipeline/**", "tools/**", "site/**", "package.json", "package-lock.json", ".github/workflows/build.yml"]
@@ -73,13 +73,13 @@ jobs:
         run: |
           mkdir -p work/logs
           pids=()
-          for group in "regions vayla" "traficom" "emodnet" "land"; do
+          for group in "regions vayla estonia germany" "traficom" "emodnet" "land"; do
             name="${group// /_}"
             /usr/bin/python3 -m pipeline.fetch $group > "work/logs/fetch_$name.log" 2>&1 &
             pids+=("$!:$name")
           done
-          # OSM seamarks: at most 35 minutes; if they cannot be fetched the package is built without new ones
-          ( timeout 2100 /usr/bin/python3 -m pipeline.fetch osm || /usr/bin/python3 -m pipeline.fetch osm_fallback ) > work/logs/fetch_osm.log 2>&1 &
+          # OSM seamarks: at most 50 minutes; regions that cannot be fetched keep the data of the last run
+          ( timeout 3000 /usr/bin/python3 -m pipeline.fetch osm || /usr/bin/python3 -m pipeline.fetch osm_fallback ) > work/logs/fetch_osm.log 2>&1 &
           pids+=("$!:osm")
           fail=0
           for p in "${pids[@]}"; do
@@ -90,7 +90,7 @@ jobs:
           exit $fail
 
       - name: Save OSM seamarks for later runs
-        if: always() && hashFiles('work/osm-last/seamark.geojsonl') != ''
+        if: always() && hashFiles('work/osm-last/*.geojsonl') != ''
         uses: actions/cache/save@v4
         with:
           path: work/osm-last

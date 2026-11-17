@@ -36,7 +36,9 @@ tai forkata koko repon. Forkissa Actions ajaa saman tietoputken itsenäisesti (A
 | Syvyysalueet ja -käyrät, Suomen vedet | Traficom, merikarttatietokanta (INSPIRE WFS, `DepthArea_A`, `DepthContour_L`) | ei navigointikäyttöön, ei-kaupallinen, lähdemerkintä siirtokuukausineen |
 | Syvyysalueet ja -käyrät, muut vedet | EMODnet Bathymetry DTM (WCS, keskisyvyys noin 115 m ruuduin) | avoin, lähdemerkintä |
 | Turvalaitteet, loistot, valosektorit, väyläalueet, navigointi- ja taululinjat, Suomi | Väylävirasto (WFS) | CC BY 4.0 |
-| Merimerkit, valot, karit, hylyt, liikenteenjakoalueet, muut maat | OpenStreetMap / OpenSeaMap-merkinnät (Geofabrikin aluepoiminnat) | ODbL 1.0 |
+| Merimerkit, väyläalueet ja väyläosuudet, Viro | Transpordiametin navigointimerkkirekisteri (INSPIRE WFS, Maa- ja Ruumiamet) | Viron avoimen datan lisenssi (CC BY 4.0 -vastine) |
+| Merimerkit ja valot sektoreineen, Saksa | BSH, Navigation marks according to S-57 (WFS) | GeoNutzV, lähdemerkintä © BSH |
+| Merimerkit, valot, karit, hylyt, liikenteenjakoalueet, muut maat | OpenStreetMap / OpenSeaMap-merkinnät alueittain: openstreetmap.fr- tai Geofabrik-poiminta tai Overpass API | ODbL 1.0 |
 | Maa-alueet ja rantaviiva | OpenStreetMap-rantaviivasta tehdyt maapolygonit (osmdata.openstreetmap.de) | ODbL 1.0 |
 | Itämeren rajaus ja Venäjän vedet | Marine Regions: IHO-merialueet ja merivyöhykkeet (WFS) | CC BY 4.0 |
 
@@ -48,8 +50,14 @@ Alue on IHO:n Itämeri (Pohjanlahti, Suomenlahti, Riianlahti ja Tanskan salmet) 
 aluevedet, sisäiset aluevedet ja talousvyöhyke on poistettu, ja ne näkyvät kartalla harmaana. Maa-alueet
 piirretään koko rajauslaatikkoon, myös Venäjän puolelle, koska muuten rannikko jäisi aukoksi.
 
-Suomen vesillä merimerkit ja syvyydet tulevat Suomen viranomaisilta, muualla OpenStreetMapista ja
-EMODnetista. OpenStreetMapin merimerkkien kattavuus ja ajantasaisuus vaihtelevat maittain.
+Merimerkit tulevat viranomaisilta siellä, missä ne ovat avoimesti saatavilla: Suomessa Väylävirastolta,
+Virossa Transpordiametilta ja Saksassa BSH:lta. Muualla (Ruotsi, Tanska, Latvia, Liettua, Puola)
+käytetään OpenStreetMapin merimerkkejä, joiden kattavuus ja ajantasaisuus vaihtelevat maittain. Viron
+rekisterissä ei ole valotietoja, joten Viron valot tulevat OpenStreetMapista.
+
+OpenStreetMapin merimerkit haetaan alueittain kolmesta lähteestä siinä järjestyksessä, kuin ne vastaavat.
+Jos alue ei onnistu mistään, sille käytetään edellisen onnistuneen ajon tietoja, ja ajon yhteenveto
+kertoo sen. Paketti rakennetaan maanantaisin ja torstaisin.
 
 ## Rakenne
 

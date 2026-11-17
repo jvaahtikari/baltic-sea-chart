@@ -32,6 +32,10 @@ EMODNET_CHUNK_DEG = 2.0
 EE_WFS = "https://inspire.geoportaal.ee/geoserver/TN_veetransport/wfs"
 EE_TERRITORY = "Estonia"
 
+# German Federal Maritime and Hydrographic Agency (BSH): navigation marks per S-57 (WFS, GeoNutzV)
+DE_WFS = "https://gdi.bsh.de/mapservice_gs/Seezeichen/wfs"
+DE_TERRITORY = "Germany"
+
 # Finnish authorities
 VAYLA_WFS = "https://avoinapi.vaylapilvi.fi/vaylatiedot/ows"
 TRAFICOM_WFS = "https://julkinen.traficom.fi/inspirepalvelu/rajoitettu/wfs"

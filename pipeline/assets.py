@@ -27,6 +27,17 @@ SOURCES = [
      "licence": "CC BY 4.0", "licence_url": "https://creativecommons.org/licenses/by/4.0/",
      "attribution": "Väylävirasto", "layers": ["seamark (Finland)", "light (Finland)", "light_sector (Finland)",
                                               "fairway (Finland)", "navline (Finland)", "leading_line"], "step": "vayla"},
+    {"id": "estonia", "name": "Transpordiamet, Eesti navigatsioonimärkide andmekogu (INSPIRE WFS, Maa- ja Ruumiamet)",
+     "provider": "Estonian Transport Administration", "licence": "Estonian open data licence (CC BY 4.0 equivalent)",
+     "licence_url": "https://geoportaal.maaamet.ee/avaandmete-litsents",
+     "attribution": "Transpordiamet / Maa- ja Ruumiamet",
+     "layers": ["seamark (Estonia)", "fairway (Estonia)", "navline (Estonia)"], "step": "estonia"},
+    {"id": "germany", "name": "BSH, Navigation marks according to S-57 (WFS)",
+     "provider": "Bundesamt für Seeschifffahrt und Hydrographie (BSH)",
+     "licence": "GeoNutzV (Nutzungsbestimmungen für die Bereitstellung von Geodaten des Bundes); not for navigation",
+     "licence_url": "http://www.gesetze-im-internet.de/geonutzv/GeoNutzV.pdf",
+     "attribution": "Quelle: © BSH", "layers": ["seamark (Germany)", "light (Germany)", "light_sector (Germany)"],
+     "step": "germany"},
     {"id": "traficom", "name": "Traficom, merikarttatietokanta (INSPIRE WFS, rajoitettu)",
      "provider": "Finnish Transport and Communications Agency Traficom",
      "licence": "Traficom hydrographic data licence: not for navigation, non-commercial use only",
@@ -74,7 +85,7 @@ def main():
     D.mkdir(parents=True, exist_ok=True)
     srcs = sources_with_dates()
     by = {s["id"]: s for s in srcs}
-    attr_chart = " · ".join(by[k]["attribution"] for k in ("osm", "vayla", "marineregions"))
+    attr_chart = " · ".join(by[k]["attribution"] for k in ("osm", "vayla", "estonia", "germany", "marineregions"))
     attr_depth = " · ".join(by[k]["attribution"] for k in ("emodnet", "traficom"))
 
     # style and source list
