@@ -1,0 +1,14 @@
+{
+  "name": "baltic-sea-chart-tools",
+  "private": true,
+  "description": "Build-time tools for the Baltic Sea chart package (sprite, vendored map libraries, screenshots)",
+  "type": "module",
+  "dependencies": {
+    "maplibre-gl": "6.19.0",
+    "pmtiles": "4.5.0",
+    "sharp": "0.35.5"
+  },
+  "devDependencies": {
+    "playwright": "1.65.1"
+  }
+}

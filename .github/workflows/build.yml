@@ -1,0 +1,148 @@
+name: Build Baltic Sea chart
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 3 * * 1"        # every Monday 03:23 UTC: all sources are fetched again from their services
+  push:
+    branches: [main]
+    paths: ["pipeline/**", "tools/**", "site/**", "package.json", "package-lock.json", ".github/workflows/build.yml"]
+
+permissions:
+  contents: write     # run-log branch and the "latest" release
+  pages: write
+  id-token: write
+
+concurrency:
+  group: build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 170
+    defaults:
+      run:
+        shell: bash      # -eo pipefail, so a failing step is not hidden by tee
+    outputs:
+      ok: ${{ steps.check.outcome == 'success' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          df -h .
+
+      - name: Install GDAL, tippecanoe and osmium
+        timeout-minutes: 12
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get -o Acquire::Retries=3 update -qq
+          ok=0
+          for i in 1 2 3; do
+            if sudo -E timeout 240 apt-get -o Acquire::Retries=3 install -y -qq --no-install-recommends \
+                 gdal-bin python3-gdal python3-numpy python3-shapely python3-pyproj tippecanoe osmium-tool zip; then ok=1; break; fi
+            sudo dpkg --configure -a || true
+          done
+          [ "$ok" = 1 ]
+          tippecanoe --version; gdalinfo --version; osmium --version | head -1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Node tools
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Fetch sources (in parallel)
+        shell: bash
+        run: |
+          mkdir -p work/logs
+          pids=()
+          for group in "regions vayla" "traficom" "emodnet" "land" "osm"; do
+            name="${group// /_}"
+            /usr/bin/python3 -m pipeline.fetch $group > "work/logs/fetch_$name.log" 2>&1 &
+            pids+=("$!:$name")
+          done
+          fail=0
+          for p in "${pids[@]}"; do
+            if ! wait "${p%%:*}"; then echo "fetch ${p#*:} FAILED"; fail=1; fi
+            echo "---- ${p#*:}"; tail -5 "work/logs/fetch_${p#*:}.log"
+          done
+          df -h .
+          exit $fail
+
+      - name: Build layers and tiles
+        run: /usr/bin/python3 -m pipeline.build 2>&1 | tee work/logs/build.log
+
+      - name: Package assets
+        run: /usr/bin/python3 -m pipeline.assets 2>&1 | tee work/logs/assets.log
+
+      - name: Screenshots
+        continue-on-error: true
+        run: |
+          /usr/bin/python3 tools/serve.py dist 8000 &
+          sleep 1
+          timeout 900 node tools/shots.mjs http://127.0.0.1:8000/index.html work/shots 2>&1 | tee work/logs/shots.log
+
+      - name: Check package
+        id: check
+        run: /usr/bin/python3 -m pipeline.check work/summary.md
+
+      - name: Publish run log to branch run-log
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          d="$(mktemp -d)"; mkdir -p "$d/log/shots" "$d/log/logs"
+          cp work/summary.md "$d/log/" 2>/dev/null || echo "no summary" > "$d/log/summary.md"
+          cp work/shots/*.png work/shots/shots.json "$d/log/shots/" 2>/dev/null || true
+          for f in work/logs/*.log; do tail -c 60000 "$f" > "$d/log/logs/$(basename "$f")"; done 2>/dev/null || true
+          cp work/mid/build_log.json "$d/log/" 2>/dev/null || true
+          cp dist/sources.json "$d/log/" 2>/dev/null || true
+          echo "run ${GITHUB_RUN_ID}, commit ${GITHUB_SHA}, $(date -u +%FT%TZ)" > "$d/log/run.txt"
+          cd "$d"; git init -q -b run-log
+          git config user.name "github-actions[bot]"; git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A; git commit -q -m "Run ${GITHUB_RUN_ID}"
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth}" push --force origin run-log
+
+      - name: Release "latest" (zip of the package)
+        if: steps.check.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd dist && zip -q -r ../baltic-sea-chart.zip . && cd ..
+          day="$(date -u +%F)"
+          notes="Built ${day} from live sources (see sources.json). Not for navigation. Unzip anywhere and open index.html."
+          if gh release view latest >/dev/null 2>&1; then
+            gh release upload latest baltic-sea-chart.zip --clobber
+            gh release edit latest --title "Baltic Sea chart ${day}" --notes "$notes"
+          else
+            gh release create latest baltic-sea-chart.zip --title "Baltic Sea chart ${day}" --notes "$notes" --latest
+          fi
+
+      - name: Upload Pages artifact
+        if: steps.check.outcome == 'success'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  pages:
+    needs: build
+    if: needs.build.outputs.ok == 'true'
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

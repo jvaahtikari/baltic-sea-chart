@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Baltic Sea chart – not for navigation</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="lib/maplibre-gl.css">
+<style>
+  html, body, #map { margin: 0; height: 100%; }
+  body { font: 14px/1.4 system-ui, sans-serif; }
+  .note { position: absolute; left: 8px; top: 8px; z-index: 2; background: rgba(255,255,255,.92); padding: 6px 10px;
+          border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,.25); max-width: min(360px, calc(100% - 70px)); }
+  .note b { color: #a00; }
+  .note small { display: block; color: #555; }
+  .maplibregl-popup-content { font-size: 13px; max-width: 260px; }
+  .maplibregl-popup-content table { border-collapse: collapse; }
+  .maplibregl-popup-content td { padding: 1px 6px 1px 0; vertical-align: top; }
+  .theme { display: inline-block; margin-top: 4px; font: inherit; font-size: 12px; padding: 2px 8px; border-radius: 4px;
+           border: 1px solid #999; background: transparent; color: inherit; cursor: pointer; }
+  html.dark body { background: #0d141b; color: #ddd; }
+  html.dark .note { background: rgba(20,28,36,.92); color: #ddd; box-shadow: 0 1px 4px rgba(0,0,0,.6); }
+  html.dark .note b { color: #ff8a80; }
+  html.dark .note small { color: #aaa; }
+  html.dark .maplibregl-popup-content { background: #1b2530; color: #ddd; }
+  html.dark .maplibregl-popup-tip { border-top-color: #1b2530 !important; border-bottom-color: #1b2530 !important; }
+  html.dark .maplibregl-ctrl-group, html.dark .maplibregl-ctrl-attrib { filter: invert(.88) hue-rotate(180deg); }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="note"><b>Not for navigation.</b> Baltic Sea chart built from open data. <small id="built"></small>
+  <button class="theme" id="theme" type="button" title="Theme: follows the system setting until changed">Theme: auto</button></div>
+<script src="lib/pmtiles.js"></script>
+<script type="module">
+import * as maplibregl from './lib/maplibre-gl.mjs';
+import { balticStyle, usePmtiles, prefersDark, setBalticTheme } from './chart-style.js';
+
+usePmtiles(maplibregl, window.pmtiles);
+const map = new maplibregl.Map({
+  container: 'map',
+  style: await balticStyle({ theme: 'auto' }),
+  center: [20.5, 59.5], zoom: 4.6, hash: true, maxZoom: 17, minZoom: 3,
+  attributionControl: { compact: true }
+});
+window.map = map;
+map.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), 'top-right');
+map.addControl(new maplibregl.ScaleControl({ unit: 'nautical' }), 'bottom-left');
+
+fetch('sources.json').then(r => r.json()).then(j => {
+  document.getElementById('built').textContent = 'Built ' + j.built.slice(0, 10) + ' · sources: sources.json';
+}).catch(() => {});
+
+// Theme: auto (system setting) -> light -> dark. ?theme=dark|light in the address overrides.
+const themes = ['auto', 'light', 'dark'];
+let theme = new URLSearchParams(location.search).get('theme') || 'auto';
+const btn = document.getElementById('theme');
+const effective = () => theme === 'auto' ? (prefersDark() ? 'dark' : 'light') : theme;
+const markPage = () => document.documentElement.classList.toggle('dark', effective() === 'dark');
+const applyTheme = async () => {
+  btn.textContent = 'Theme: ' + theme;
+  markPage();
+  await setBalticTheme(map, theme);
+};
+markPage();
+btn.onclick = () => { theme = themes[(themes.indexOf(theme) + 1) % themes.length]; applyTheme(); };
+if (theme !== 'auto') map.once('load', applyTheme);
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (theme === 'auto') applyTheme(); });
+
+const clickable = ['seamark', 'light-flare', 'hazard', 'navline', 'fairway', 'depth-area'];
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+map.on('click', e => {
+  const f = map.queryRenderedFeatures(e.point, { layers: clickable })[0];
+  if (!f) return;
+  const rows = Object.entries(f.properties).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join('');
+  new maplibregl.Popup().setLngLat(e.lngLat).setHTML(`<b>${esc(f.sourceLayer)}</b><table>${rows}</table>`).addTo(map);
+});
+for (const l of clickable) {
+  map.on('mouseenter', l, () => map.getCanvas().style.cursor = 'pointer');
+  map.on('mouseleave', l, () => map.getCanvas().style.cursor = '');
+}
+</script>
+</body>
+</html>

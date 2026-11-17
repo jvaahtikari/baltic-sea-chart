@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Baltic Sea chart as an overlay – example</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="lib/maplibre-gl.css">
+<style>
+  html, body, #map { margin: 0; height: 100%; background: #0b1216; }
+  .bar { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 2; display: flex; gap: 6px; }
+  .bar button { font: 13px system-ui, sans-serif; color: #dfe7ea; background: #16232a; border: 1px solid #2c3c44;
+                border-radius: 16px; padding: 5px 12px; cursor: pointer; }
+  .bar button.on { background: #1f9d55; border-color: #1f9d55; color: #fff; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="bar">
+  <button id="light">Light map</button>
+  <button id="depth" class="on">Depths</button>
+  <button id="marks" class="on">Seamarks</button>
+</div>
+<script src="lib/pmtiles.js"></script>
+<script type="module">
+// Example of embedding: your own (here: empty dark) base style, chart layers added on top, below your
+// own data layers. A real application keeps its own sources, layers and glyph server.
+import * as maplibregl from './lib/maplibre-gl.mjs';
+import { addBalticLayers, setBalticTheme, usePmtiles } from './chart-style.js';
+
+usePmtiles(maplibregl, window.pmtiles);
+const own = {
+  version: 8,
+  glyphs: new URL('fonts/{fontstack}/{range}.pbf', location.href).href.replace('%7Bfontstack%7D', '{fontstack}').replace('%7Brange%7D', '{range}'),
+  sources: { ship: { type: 'geojson', data: { type: 'Feature', properties: { name: 'Example vessel' }, geometry: { type: 'Point', coordinates: [21.3, 59.9] } } } },
+  layers: [
+    { id: 'base', type: 'background', paint: { 'background-color': '#0b1216' } },
+    { id: 'vessels', type: 'circle', source: 'ship', paint: { 'circle-radius': 7, 'circle-color': '#1fd16b', 'circle-stroke-color': '#0b1216', 'circle-stroke-width': 2 } },
+  ],
+};
+const map = new maplibregl.Map({ container: 'map', style: own, center: [21, 59.8], zoom: 6, hash: true });
+window.map = map;
+map.addControl(new maplibregl.NavigationControl(), 'top-right');
+let theme = 'dark';
+map.on('load', async () => {
+  await addBalticLayers(map, { theme, beforeId: 'vessels' });
+});
+const groups = {
+  depth: ['depth-area', 'depth-area-edge', 'depth-contour', 'depth-label'],
+  marks: ['seamark', 'light-flare', 'light-label', 'light-sector-arc', 'light-sector-limit', 'seamark-name', 'hazard'],
+};
+for (const [btn, ids] of Object.entries(groups)) {
+  document.getElementById(btn).onclick = e => {
+    const on = e.target.classList.toggle('on');
+    for (const id of ids) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
+  };
+}
+document.getElementById('light').onclick = async e => {
+  theme = e.target.classList.toggle('on') ? 'light' : 'dark';
+  map.setPaintProperty('base', 'background-color', theme === 'light' ? '#e3e8ec' : '#0b1216');
+  await setBalticTheme(map, theme);
+};
+</script>
+</body>
+</html>
