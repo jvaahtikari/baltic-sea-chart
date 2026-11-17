@@ -97,8 +97,16 @@ def zoom_filter(layers):
     return json.dumps(flt)
 
 
-def union_of(features):
-    return unary_union([shape(f["geometry"]).buffer(0) for f in features if f.get("geometry")])
+def union_of(features, bounds=C.BBOX):
+    """Union of the features, cut to the bounding box first (world-wide zones are huge)."""
+    parts = []
+    for f in features:
+        if not f.get("geometry"):
+            continue
+        g = shapely.clip_by_rect(shape(f["geometry"]), *bounds)
+        if not g.is_empty:
+            parts.append(shapely.make_valid(g))
+    return unary_union(parts)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -232,6 +240,7 @@ def step_depth():
     mdir = C.WORK / "depth"
     mdir.mkdir(parents=True, exist_ok=True)
 
+    t0 = time.time()
     # 1. Finnish depth areas inside Finnish waters (Traficom), and their coverage for masking EMODnet.
     w_area, w_cnt = Writer("depth_area"), Writer("depth_contour")
     cov_path = mdir / "traficom_cover.geojsonl"
@@ -260,6 +269,7 @@ def step_depth():
         v = num(ft["properties"].get("VALDCO"))
         w_cnt.add(g, {"depth": v, "src": "traficom"}, minzoom=max(FI_DETAIL_ZOOM + 2, contour_minzoom(v)))
     LOG["traficom_depth_areas_used"] = n_fi
+    say("  Traficom done (%.0f s)" % (time.time() - t0))
 
     # 2. EMODnet grid: depth in metres, masked to the area of interest minus Finnish coverage.
     vrt = mdir / "emodnet.vrt"
@@ -315,37 +325,77 @@ def step_depth():
         b.WriteArray(np.where(np.isfinite(a), a, -9999).astype(np.float32))
         ds = None
 
-    # Overview (zoom <= FI_DETAIL_ZOOM-1): EMODnet everywhere. Detail: EMODnet outside Finnish coverage.
-    write_tif(mdir / "emodnet_overview.tif", depth)
+    # Overview (zoom <= FI_DETAIL_ZOOM-1): EMODnet everywhere, at a quarter of the resolution.
+    # Detail: EMODnet outside Finnish coverage, full resolution.
+    write_tif(mdir / "emodnet_overview_full.tif", depth)
+    run(["gdal_translate", "-q", "-r", "average", "-outsize", "25%", "25%", "-co", "COMPRESS=DEFLATE",
+         mdir / "emodnet_overview_full.tif", mdir / "emodnet_overview.tif"])
+    (mdir / "emodnet_overview_full.tif").unlink()
     depth[fi_cov] = np.nan
     write_tif(mdir / "emodnet_detail.tif", depth)
+    has_data = np.isfinite(depth)
     del depth
+    say("  depth rasters written (%.0f s)" % (time.time() - t0))
 
-    levels = [str(v) for v in C.DEPTH_LEVELS]
     top = C.DEPTH_LEVELS[-1]
     for part, zmin, zmax in (("overview", None, FI_DETAIL_ZOOM - 1), ("detail", FI_DETAIL_ZOOM, None)):
         tif = mdir / ("emodnet_%s.tif" % part)
-        poly = mdir / ("emodnet_area_%s.gpkg" % part)
-        line = mdir / ("emodnet_contour_%s.gpkg" % part)
-        for p in (poly, line):
-            if p.exists():
-                p.unlink()
-        run(["gdal_contour", "-q", "-p", "-amin", "dmin", "-amax", "dmax", "-fl"] + levels + [tif, poly])
-        run(["gdal_contour", "-q", "-a", "depth", "-fl"] + levels[1:] + [tif, line])
-        for ft in ogr_features(poly):
-            d1, d2 = snap_level(ft["dmin"]), snap_level(ft["dmax"])
-            if d1 is None or (d2 is not None and d2 <= d1):
-                continue
-            w_area.add(ft["geom"], {"drval1": d1, "drval2": None if d1 >= top else d2, "src": "emodnet"},
-                       minzoom=max(zmin or 0, depth_minzoom(d1)), maxzoom=zmax)
-        for ft in ogr_features(line):
-            v = snap_level(ft["depth"])
-            w_cnt.add(ft["geom"], {"depth": v, "src": "emodnet"}, minzoom=max(zmin or 0, contour_minzoom(v)), maxzoom=zmax)
+        polys, lines = contour_chunks(tif, mdir / ("chunks_" + part), has_data if part == "detail" else None)
+        for poly in polys:
+            for ft in ogr_features(poly):
+                d1, d2 = snap_level(ft["dmin"]), snap_level(ft["dmax"])
+                if d1 is None or (d2 is not None and d2 <= d1):
+                    continue
+                w_area.add(ft["geom"], {"drval1": d1, "drval2": None if d1 >= top else d2, "src": "emodnet"},
+                           minzoom=max(zmin or 0, depth_minzoom(d1)), maxzoom=zmax)
+        for line in lines:
+            for ft in ogr_features(line):
+                v = snap_level(ft["depth"])
+                w_cnt.add(ft["geom"], {"depth": v, "src": "emodnet"}, minzoom=max(zmin or 0, contour_minzoom(v)),
+                          maxzoom=zmax)
+        say("  EMODnet %s contours done (%.0f s)" % (part, time.time() - t0))
     w_area.close()
     w_cnt.close()
 
 
 FI_DETAIL_ZOOM = 9   # Finnish (Traficom) depth data replaces EMODnet from this zoom on
+CHUNK_PX = int(__import__("os").environ.get("BSC_CHUNK_PX", 2048))
+
+
+def contour_chunks(tif, outdir, has_data=None):
+    """Depth areas and contour lines with gdal_contour, in windows of CHUNK_PX pixels run in parallel.
+    Polygon assembly slows down sharply with polygon size, so a single run over the whole Baltic takes
+    very long. Neighbouring windows share one pixel column/row, so the pieces meet without gaps."""
+    import concurrent.futures as cf
+    outdir.mkdir(parents=True, exist_ok=True)
+    ds = gdal.Open(str(tif))
+    W, H = ds.RasterXSize, ds.RasterYSize
+    ds = None
+    levels = [str(v) for v in C.DEPTH_LEVELS]
+    jobs = []
+    for y in range(0, H - 1, CHUNK_PX):
+        for x in range(0, W - 1, CHUNK_PX):
+            w, h = min(CHUNK_PX + 1, W - x), min(CHUNK_PX + 1, H - y)
+            if has_data is not None and not has_data[y:y + h, x:x + w].any():
+                continue
+            jobs.append((x, y, w, h))
+
+    def one(job):
+        x, y, w, h = job
+        stem = outdir / ("c_%05d_%05d" % (x, y))
+        vrt, poly, line = stem.with_suffix(".vrt"), Path(str(stem) + "_a.gpkg"), Path(str(stem) + "_l.gpkg")
+        for p in (poly, line):
+            if p.exists():
+                p.unlink()
+        subprocess.run(["gdal_translate", "-q", "-of", "VRT", "-srcwin", str(x), str(y), str(w), str(h), str(tif), str(vrt)], check=True)
+        subprocess.run(["gdal_contour", "-q", "-p", "-amin", "dmin", "-amax", "dmax", "-fl"] + levels + [str(vrt), str(poly)], check=True)
+        subprocess.run(["gdal_contour", "-q", "-a", "depth", "-fl"] + levels[1:] + [str(vrt), str(line)], check=True)
+        return poly, line
+
+    with cf.ThreadPoolExecutor(4) as ex:
+        res = list(ex.map(one, jobs))
+    say("  %s: %d windows" % (tif.name, len(jobs)))
+    return [r[0] for r in res], [r[1] for r in res]
 
 
 def ogr_features(path):
