@@ -46,6 +46,11 @@ def main(argv):
             warnings.append("OSM seamarks for %s could not be fetched and no earlier data exists (%s)" % (name, "; ".join(r.get("errors", []))[:300]))
         elif r.get("stale"):
             warnings.append("OSM seamarks for %s are from an earlier run (%s)" % (name, r.get("fetched")))
+    for step in ("estonia", "germany", "vayla"):
+        lp = C.RAW / step / "log.json"
+        lg = json.loads(lp.read_text()) if lp.exists() else {}
+        if lg.get("failed"):
+            warnings.append("%s authority source failed, OSM seamarks used instead: %s" % (step, lg["failed"][:300]))
     if not osm.get("regions") and (osm.get("missing") or osm.get("stale")):
         warnings.append("OSM seamarks: %s" % osm.get("source"))
     lines = ["# Build summary", "", "Result: **%s**" % ("OK" if not problems else "PROBLEMS"), ""]

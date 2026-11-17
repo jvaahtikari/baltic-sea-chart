@@ -80,7 +80,8 @@ def wfs_paged(base, typename, dest, page=5000, workers=4, **extra):
     starts = list(range(0, total, page))
 
     def one(s):
-        j = wfs_json(base, count=page, startIndex=s, **q)
+        # GeoServer refuses startIndex on layers without a primary key, so page only when needed
+        j = wfs_json(base, count=page, startIndex=s, **q) if total > page else wfs_json(base, **q)
         return s, j["features"]
 
     n = 0
@@ -428,11 +429,22 @@ STEPS = {"regions": step_regions, "emodnet": step_emodnet, "vayla": step_vayla,
          "germany": step_germany, "land": step_land}
 
 
+# Optional authority sources: if one fails, the build falls back to OSM in that area and the run goes on.
+OPTIONAL = {"estonia": "estonia", "germany": "germany"}
+
+
 def main(argv):
     names = argv or list(STEPS)
     for n in names:
         t = time.time()
-        STEPS[n]()
+        try:
+            STEPS[n]()
+        except Exception as e:  # noqa: BLE001
+            if n not in OPTIONAL:
+                raise
+            shutil.rmtree(RAW / OPTIONAL[n], ignore_errors=True)
+            log_step(n, failed=str(e)[:500], fallback="OpenStreetMap seamarks are used in this area")
+            print("[%s] FAILED, falling back to OSM: %s" % (n, str(e)[:300]), flush=True)
         print("[%s] done in %.0f s" % (n, time.time() - t), flush=True)
 
 
