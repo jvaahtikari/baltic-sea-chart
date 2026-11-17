@@ -114,8 +114,10 @@ def step_areas():
     iho = union_of(read_geojson(d / "iho.geojson")).intersection(frame)
     excluded = unary_union([union_of(read_geojson(p)) for p in sorted(d.glob("excluded_*.geojson"))]).intersection(frame)
     fi = unary_union([union_of(read_geojson(p)) for p in sorted(d.glob("fi_*.geojson"))]).intersection(frame)
-    aoi = iho.buffer(C.AOI_BUFFER_DEG, 8).intersection(frame).difference(excluded)
-    fi_zone = fi.buffer(0.005).intersection(aoi)
+    # Simplify before buffering: the buffer is wide, so detail below ~1 km does not matter, and
+    # buffering the full-detail coastline takes many minutes.
+    aoi = iho.simplify(0.01).buffer(C.AOI_BUFFER_DEG, 4).intersection(frame).difference(excluded)
+    fi_zone = fi.simplify(0.002).buffer(0.005, 4).intersection(aoi)
     areas = {"aoi": aoi, "excluded": excluded, "fi_zone": fi_zone, "iho": iho}
     (MID).mkdir(parents=True, exist_ok=True)
     (MID / "areas.json").write_text(json.dumps({k: shapely.to_wkb(v, hex=True) for k, v in areas.items()}))
@@ -235,22 +237,26 @@ def step_depth():
     cov_path = mdir / "traficom_cover.geojsonl"
     n_fi = 0
     with open(cov_path, "w", encoding="utf-8") as cov:
+        # Features are selected by a representative point instead of being clipped: clipping
+        # 150 000 polygons against the detailed zone outline takes far too long, and the zone
+        # boundary lies at sea (borders) or on the coast (lakes are left out), so nothing is lost.
         for ft in read_seq(tdir / "DepthArea_A.geojsonl"):
-            g = shape(ft["geometry"])
-            if not fi_zone.intersects(g):
+            if not ft.get("geometry"):
                 continue
-            if not fi_zone.contains(g):
-                g = g.intersection(fi_zone)
+            g = shape(ft["geometry"])
+            if g.is_empty or not fi_zone.contains(g.representative_point()):
+                continue
             p = ft["properties"]
             d1, d2 = num(p.get("DRVAL1")), num(p.get("DRVAL2"))
             w_area.add(g, {"drval1": d1, "drval2": d2, "src": "traficom"}, minzoom=FI_DETAIL_ZOOM)
             cov.write(json.dumps({"type": "Feature", "properties": {}, "geometry": mapping(g)}) + "\n")
             n_fi += 1
     for ft in read_seq(tdir / "DepthContour_L.geojsonl"):
-        g = shape(ft["geometry"])
-        if not fi_zone.intersects(g):
+        if not ft.get("geometry"):
             continue
-        g = g.intersection(fi_zone)
+        g = shape(ft["geometry"])
+        if g.is_empty or not fi_zone.contains(g.representative_point()):
+            continue
         v = num(ft["properties"].get("VALDCO"))
         w_cnt.add(g, {"depth": v, "src": "traficom"}, minzoom=max(FI_DETAIL_ZOOM + 2, contour_minzoom(v)))
     LOG["traficom_depth_areas_used"] = n_fi
@@ -655,9 +661,10 @@ def step_routes():
     w_fw, w_nav, w_lead, w_tss = Writer("fairway"), Writer("navline"), Writer("leading_line"), Writer("tss")
 
     def clip(g):
-        if not aoi.intersects(g):
+        """Keep features whose representative point is in the area (no costly clipping)."""
+        if g.is_empty or not aoi.contains(g.representative_point()):
             return None
-        return g if aoi.contains(g) else g.intersection(aoi)
+        return g
 
     for ft in read_seq(vd / "vaylaalueet_uusi.geojsonl"):
         g = clip(shape(ft["geometry"]))
