@@ -197,7 +197,7 @@ def overpass(query):
     last = None
     for server in C.OVERPASS:
         try:
-            j = json.loads(http_get(server, data=data, tries=2, timeout=400))
+            j = json.loads(http_get(server, data=data, tries=1, timeout=300))
             if "elements" not in j:
                 raise RuntimeError("no elements: %s" % str(j)[:200])
             if j.get("remark") and "error" in j["remark"].lower():
@@ -230,29 +230,34 @@ OSM_LAST = C.WORK / "osm-last" / "seamark.geojsonl"   # kept between runs by the
 
 
 def step_osm():
-    """OpenStreetMap seamarks: Overpass API, then the Geofabrik extracts, and if both are unreachable
-    the seamarks of the last successful run (the run log says so)."""
+    """OpenStreetMap seamarks: Overpass API, then the Geofabrik extracts. If both fail, see step_osm_fallback."""
     try:
         step_osm_overpass()
     except RuntimeError as e:
         print("Overpass failed (%s), falling back to Geofabrik extracts" % e, flush=True)
-        try:
-            step_osm_geofabrik()
-        except Exception as e2:  # noqa: BLE001
-            if not OSM_LAST.exists():
-                raise
-            print("Geofabrik failed too (%s); using the seamarks of the last successful run" % e2, flush=True)
-            out = RAW / "osm" / "seamark.geojsonl"
-            out.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy(OSM_LAST, out)
-            prev = OSM_LAST.with_name("log.json")
-            info = json.loads(prev.read_text()) if prev.exists() else {}
-            log_step("osm", source="previous run (both OSM sources unreachable)", previous=info,
-                     licence="ODbL 1.0, © OpenStreetMap contributors", stale=True)
-            return
+        step_osm_geofabrik()
     OSM_LAST.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy(RAW / "osm" / "seamark.geojsonl", OSM_LAST)
     shutil.copy(RAW / "osm" / "log.json", OSM_LAST.with_name("log.json"))
+
+
+def step_osm_fallback():
+    """Used by the workflow when step_osm fails or runs out of time: the seamarks of the last successful
+    run if the cache has them, otherwise no OSM seamarks at all. The package is still built (Finnish
+    seamarks, depths and land do not depend on OSM) and sources.json / the run log say what happened."""
+    out = RAW / "osm" / "seamark.geojsonl"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    if OSM_LAST.exists():
+        shutil.copy(OSM_LAST, out)
+        prev = OSM_LAST.with_name("log.json")
+        info = json.loads(prev.read_text()) if prev.exists() else {}
+        log_step("osm", source="previous successful run (OSM sources unreachable)", previous_fetch=info.get("fetched"),
+                 features=sum(1 for _ in open(out, encoding="utf-8")), stale=True,
+                 licence="ODbL 1.0, © OpenStreetMap contributors")
+    else:
+        out.write_text("", encoding="utf-8")
+        log_step("osm", source="none: OSM sources unreachable and no earlier data", features=0, missing=True,
+                 licence="ODbL 1.0, © OpenStreetMap contributors")
 
 
 def step_osm_overpass():
@@ -295,7 +300,7 @@ def step_osm_geofabrik():
         name = region.replace("/", "_")
         pbf = d / (name + ".osm.pbf")
         sea = d / (name + "_seamark.osm.pbf")
-        http_get(C.GEOFABRIK + region + "-latest.osm.pbf", pbf, timeout=1800)
+        http_get(C.GEOFABRIK + region + "-latest.osm.pbf", pbf, tries=3, timeout=1800)
         run(["osmium", "tags-filter", "--overwrite", "-o", sea, pbf, "nwr/seamark:type"])
         pbf.unlink()
         return sea
@@ -333,7 +338,7 @@ def step_land():
 
 
 STEPS = {"regions": step_regions, "emodnet": step_emodnet, "vayla": step_vayla,
-         "traficom": step_traficom, "osm": step_osm, "land": step_land}
+         "traficom": step_traficom, "osm": step_osm, "osm_fallback": step_osm_fallback, "land": step_land}
 
 
 def main(argv):

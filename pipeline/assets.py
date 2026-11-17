@@ -61,6 +61,10 @@ def sources_with_dates():
             lg = json.loads(logp.read_text(encoding="utf-8"))
             s["fetched"] = lg.get("fetched")
             s["endpoint"] = lg.get("source")
+            if lg.get("missing"):
+                s["status"] = "not available in this build"
+            elif lg.get("stale"):
+                s["status"] = "from an earlier build (%s)" % lg.get("previous_fetch")
         out.append(s)
     return out
 

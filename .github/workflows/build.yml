@@ -73,11 +73,14 @@ jobs:
         run: |
           mkdir -p work/logs
           pids=()
-          for group in "regions vayla" "traficom" "emodnet" "land" "osm"; do
+          for group in "regions vayla" "traficom" "emodnet" "land"; do
             name="${group// /_}"
             /usr/bin/python3 -m pipeline.fetch $group > "work/logs/fetch_$name.log" 2>&1 &
             pids+=("$!:$name")
           done
+          # OSM seamarks: at most 35 minutes; if they cannot be fetched the package is built without new ones
+          ( timeout 2100 /usr/bin/python3 -m pipeline.fetch osm || /usr/bin/python3 -m pipeline.fetch osm_fallback ) > work/logs/fetch_osm.log 2>&1 &
+          pids+=("$!:osm")
           fail=0
           for p in "${pids[@]}"; do
             if ! wait "${p%%:*}"; then echo "fetch ${p#*:} FAILED"; fail=1; fi

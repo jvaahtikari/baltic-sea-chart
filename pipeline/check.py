@@ -10,8 +10,8 @@ from . import config as C
 
 # Lower limits for a full Baltic build; a much smaller count means a source failed silently.
 MIN_FEATURES = {"land": 1000, "coastline": 1000, "depth_area": 1000, "depth_contour": 10000, "depth_fi_area": 50000,
-                "depth_fi_contour": 50000, "seamark": 20000,
-                "light": 3000, "light_sector": 3000, "fairway": 1000, "navline": 5000, "nodata": 1}
+                "depth_fi_contour": 50000, "seamark": 15000,
+                "light": 2000, "light_sector": 3000, "fairway": 1000, "navline": 5000, "nodata": 1}
 
 
 def main(argv):
@@ -38,7 +38,15 @@ def main(argv):
     if shot_info and shot_info.get("errors"):
         problems.append("browser errors: %s" % shot_info["errors"][:5])
 
+    osm_log = C.RAW / "osm" / "log.json"
+    osm = json.loads(osm_log.read_text()) if osm_log.exists() else {}
+    warnings = []
+    if osm.get("missing"):
+        warnings.append("OSM seamarks could not be fetched: seamarks, lights and hazards outside Finland are missing in this build")
+    elif osm.get("stale"):
+        warnings.append("OSM seamarks could not be fetched: using those of the run at %s" % osm.get("previous_fetch"))
     lines = ["# Build summary", "", "Result: **%s**" % ("OK" if not problems else "PROBLEMS"), ""]
+    lines += ["## Warnings", ""] + ["- " + w for w in warnings] + [""] if warnings else []
     lines += ["## Problems", ""] + ["- " + p for p in problems] + [""] if problems else []
     lines += ["## Features per layer", "", "| Layer | Features |", "| --- | ---: |"]
     lines += ["| %s | %s |" % (k, v) for k, v in feats.items()]
