@@ -30,25 +30,32 @@ def log_step(step, **info):
     print("[%s] %s" % (step, json.dumps(info, ensure_ascii=False)[:600]), flush=True)
 
 
-def http_get(url, dest=None, tries=8, timeout=600):
-    """GET with retries. Returns bytes (dest None) or writes to dest and returns its size."""
+def http_get(url, dest=None, tries=8, timeout=600, data=None):
+    """GET (or POST form data) with curl over IPv4 and retries. Returns bytes, or the size written to dest.
+
+    curl -4 is used because GitHub's runners have repeatedly failed to reach some German OSM hosts
+    with "Network is unreachable" through Python's own client."""
     last = None
     for i in range(tries):
-        try:
-            req = urllib.request.Request(url, headers={"User-Agent": C.USER_AGENT})
-            with urllib.request.urlopen(req, timeout=timeout) as r:
-                if dest is None:
-                    return r.read()
-                tmp = dest.with_suffix(dest.suffix + ".part")
-                with open(tmp, "wb") as f:
-                    shutil.copyfileobj(r, f, 1 << 20)
-                tmp.replace(dest)
-                return dest.stat().st_size
-        except Exception as e:  # noqa: BLE001 - network errors of every kind are retried
-            last = e
-            wait = min(120, 5 * (i + 1) ** 2)   # up to ~10 minutes in all: brief network outages do happen
-            print("  retry %d/%d in %ds: %s (%s)" % (i + 1, tries, wait, url[:160], e), flush=True)
-            time.sleep(wait)
+        cmd = ["curl", "-4", "-sS", "-f", "-L", "--compressed", "--connect-timeout", "30", "--max-time", str(timeout),
+               "-A", C.USER_AGENT]
+        if data is not None:
+            cmd += ["--data-binary", "@-", "-H", "Content-Type: application/x-www-form-urlencoded"]
+        tmp = None
+        if dest is not None:
+            tmp = dest.with_suffix(dest.suffix + ".part")
+            cmd += ["-o", str(tmp)]
+        cmd.append(url)
+        p = subprocess.run(cmd, input=data, capture_output=True)
+        if p.returncode == 0:
+            if dest is None:
+                return p.stdout
+            tmp.replace(dest)
+            return dest.stat().st_size
+        last = p.stderr.decode("utf-8", "replace").strip()[:300]
+        wait = min(120, 5 * (i + 1) ** 2)   # up to ~10 minutes in all: brief network outages do happen
+        print("  retry %d/%d in %ds: %s (%s)" % (i + 1, tries, wait, url[:160], last), flush=True)
+        time.sleep(wait)
     raise RuntimeError("download failed: %s: %s" % (url, last))
 
 
@@ -185,24 +192,20 @@ AREA_SEAMARKS = {"fairway", "dredged_area", "separation_zone", "inshore_traffic_
                  "seaplane_landing_area", "marine_farm", "dumping_ground", "military_area", "obstruction", "wreck", "rock"}
 
 
-def overpass(query, tries_per_server=1):
+def overpass(query):
     data = urllib.parse.urlencode({"data": query}).encode()
     last = None
     for server in C.OVERPASS:
-        for i in range(tries_per_server):
-            try:
-                req = urllib.request.Request(server, data=data, headers={"User-Agent": C.USER_AGENT})
-                with urllib.request.urlopen(req, timeout=400) as r:
-                    j = json.loads(r.read())
-                if "elements" not in j:
-                    raise RuntimeError("no elements: %s" % str(j)[:200])
-                if j.get("remark") and "error" in j["remark"].lower():
-                    raise RuntimeError(j["remark"][:300])
-                return server, j["elements"]
-            except Exception as e:  # noqa: BLE001
-                last = e
-                print("  overpass %s attempt %d: %s" % (server, i + 1, e), flush=True)
-                time.sleep(10)
+        try:
+            j = json.loads(http_get(server, data=data, tries=2, timeout=400))
+            if "elements" not in j:
+                raise RuntimeError("no elements: %s" % str(j)[:200])
+            if j.get("remark") and "error" in j["remark"].lower():
+                raise RuntimeError(j["remark"][:300])
+            return server, j["elements"]
+        except Exception as e:  # noqa: BLE001
+            last = e
+            print("  overpass %s: %s" % (server, str(e)[:200]), flush=True)
     raise RuntimeError("all Overpass servers failed: %s" % last)
 
 
