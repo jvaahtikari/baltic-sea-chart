@@ -140,9 +140,39 @@ def area_km2(geom):
 
 # ---------------------------------------------------------------------------------------------
 # Land and coastline (OSM coastline-derived land polygons)
+def coast_lines(poly, frame_bounds):
+    """Polygon rings minus the stretches that lie on the clipping frame (fast, coordinate based)."""
+    x0, y0, x1, y1 = frame_bounds
+    eps = 1e-9
+    out = []
+    for ring in shapely.get_rings(poly):
+        xy = shapely.get_coordinates(ring)
+        on_x = (np.abs(xy[:, 0] - x0) < eps) | (np.abs(xy[:, 0] - x1) < eps)
+        on_y = (np.abs(xy[:, 1] - y0) < eps) | (np.abs(xy[:, 1] - y1) < eps)
+        a, b = xy[:-1], xy[1:]
+        # a segment is on the frame if both ends share the same frame edge
+        frame_seg = ((np.abs(a[:, 0] - x0) < eps) & (np.abs(b[:, 0] - x0) < eps)) | \
+                    ((np.abs(a[:, 0] - x1) < eps) & (np.abs(b[:, 0] - x1) < eps)) | \
+                    ((np.abs(a[:, 1] - y0) < eps) & (np.abs(b[:, 1] - y0) < eps)) | \
+                    ((np.abs(a[:, 1] - y1) < eps) & (np.abs(b[:, 1] - y1) < eps))
+        del on_x, on_y
+        if not frame_seg.any():
+            out.append(LineString(xy))
+            continue
+        keep = ~frame_seg
+        idx = np.flatnonzero(keep)
+        if idx.size == 0:
+            continue
+        # consecutive kept segments form one line
+        breaks = np.flatnonzero(np.diff(idx) > 1)
+        starts = np.concatenate([[idx[0]], idx[breaks + 1]])
+        ends = np.concatenate([idx[breaks], [idx[-1]]])
+        for st, en in zip(starts, ends):
+            out.append(LineString(xy[st:en + 2]))
+    return shapely.MultiLineString(out) if out else None
+
+
 def step_land():
-    frame = box(*C.BBOX)
-    edge = frame.boundary.buffer(1e-7)
     w_land, w_coast = Writer("land"), Writer("coastline")
     # Detailed land from zoom 8 on, simplified land below it.
     for ft in read_seq(RAW / "land" / "land_simplified.geojsonl"):
@@ -153,8 +183,7 @@ def step_land():
         if g.is_empty:
             continue
         w_land.add(g, {"src": "osm"}, minzoom=8)
-        coast = g.boundary.difference(edge)
-        w_coast.add(coast, {"src": "osm"}, minzoom=6)
+        w_coast.add(coast_lines(g, C.BBOX), {"src": "osm"}, minzoom=6)
     w_land.close()
     w_coast.close()
 

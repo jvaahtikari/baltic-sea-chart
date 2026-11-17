@@ -79,8 +79,19 @@ jobs:
           df -h .
           exit $fail
 
-      - name: Build layers and tiles
-        run: /usr/bin/python3 -m pipeline.build 2>&1 | tee work/logs/build.log
+      # One step per build stage, so the Actions view shows where time goes
+      - name: "Build: areas"
+        run: /usr/bin/python3 -m pipeline.build areas 2>&1 | tee -a work/logs/build.log
+      - name: "Build: land"
+        run: /usr/bin/python3 -m pipeline.build land 2>&1 | tee -a work/logs/build.log
+      - name: "Build: depth"
+        run: /usr/bin/python3 -m pipeline.build depth 2>&1 | tee -a work/logs/build.log
+      - name: "Build: seamarks and lights"
+        run: /usr/bin/python3 -m pipeline.build marks 2>&1 | tee -a work/logs/build.log
+      - name: "Build: routes"
+        run: /usr/bin/python3 -m pipeline.build routes 2>&1 | tee -a work/logs/build.log
+      - name: "Build: tiles"
+        run: /usr/bin/python3 -m pipeline.build tiles 2>&1 | tee -a work/logs/build.log
 
       - name: Package assets
         run: /usr/bin/python3 -m pipeline.assets 2>&1 | tee work/logs/assets.log
