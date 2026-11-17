@@ -61,6 +61,13 @@ jobs:
           npm ci --no-audit --no-fund
           npx playwright install --with-deps chromium
 
+      - name: Preflight (every source and the seamark parsers, a few minutes)
+        run: |
+          mkdir -p work/logs
+          set +e
+          BSC_WORK="$RUNNER_TEMP/pre" /usr/bin/python3 -m pipeline.preflight 2>&1 | tee work/logs/preflight.log
+          rc=${PIPESTATUS[0]}; cp "$RUNNER_TEMP/pre/preflight.md" work/ 2>/dev/null || true; exit $rc
+
       - name: Restore OSM seamarks of the last successful run (used only if both OSM sources fail)
         uses: actions/cache/restore@v4
         with:
@@ -131,6 +138,7 @@ jobs:
         run: |
           d="$(mktemp -d)"; mkdir -p "$d/log/shots" "$d/log/logs"
           cp work/summary.md "$d/log/" 2>/dev/null || echo "no summary" > "$d/log/summary.md"
+          cp work/preflight.md "$d/log/" 2>/dev/null || true
           cp work/shots/*.png work/shots/shots.json "$d/log/shots/" 2>/dev/null || true
           for f in work/logs/*.log; do tail -c 60000 "$f" > "$d/log/logs/$(basename "$f")"; done 2>/dev/null || true
           cp work/mid/build_log.json "$d/log/" 2>/dev/null || true

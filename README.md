@@ -62,6 +62,8 @@ kertoo sen. Paketti rakennetaan maanantaisin ja torstaisin.
 ## Rakenne
 
 ```
+pipeline/preflight.py  pikatesti ennen pitkää ajoa: jokainen lähde pienellä kyselyllä, Viron ja Saksan
+                     merimerkit kokonaan haettuina rakennusvaiheen omilla jäsentimillä (muutama minuutti)
 pipeline/fetch.py    lähteiden haku rajapinnoista (regions, emodnet, vayla, traficom, osm, land)
 pipeline/build.py    rajaus, maa, syvyydet, merimerkit ja reitit GeoJSONSeq-kerroksiksi, tippecanoe -> PMTiles
 pipeline/style.py    MapLibre-tyylit (vaalea ja tumma)
