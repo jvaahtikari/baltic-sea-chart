@@ -18,7 +18,50 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # A few minutes: every source with a small request, the Estonian and German seamarks fetched in full
+  # and run through the build's parsers. The report goes to the preflight-log branch at once, and the
+  # long build starts only if the required sources answer.
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install GDAL
+        timeout-minutes: 8
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get -o Acquire::Retries=3 update -qq
+          sudo -E apt-get -o Acquire::Retries=3 install -y -qq --no-install-recommends \
+            gdal-bin python3-gdal python3-numpy python3-shapely python3-pyproj
+      - name: Preflight
+        run: |
+          set +e
+          BSC_WORK="$RUNNER_TEMP/pre" /usr/bin/python3 -m pipeline.preflight 2>&1 | tee "$RUNNER_TEMP/preflight.log"
+          rc=${PIPESTATUS[0]}; echo "rc=$rc" > "$RUNNER_TEMP/rc"; exit $rc
+      - name: Publish preflight report to branch preflight-log
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          d="$(mktemp -d)"
+          cp "$RUNNER_TEMP/pre/preflight.md" "$d/" 2>/dev/null || echo "no report" > "$d/preflight.md"
+          cp "$RUNNER_TEMP/preflight.log" "$d/" 2>/dev/null || true
+          echo "run ${GITHUB_RUN_ID}, commit ${GITHUB_SHA}, $(date -u +%FT%TZ), $(cat "$RUNNER_TEMP/rc" 2>/dev/null)" > "$d/run.txt"
+          cd "$d"; git init -q -b preflight-log
+          git config user.name "github-actions[bot]"; git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A; git commit -q -m "Preflight ${GITHUB_RUN_ID}"
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth}" push --force origin preflight-log
+
   build:
+    needs: preflight
     runs-on: ubuntu-24.04
     timeout-minutes: 170
     defaults:
@@ -60,13 +103,6 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           npx playwright install --with-deps chromium
-
-      - name: Preflight (every source and the seamark parsers, a few minutes)
-        run: |
-          mkdir -p work/logs
-          set +e
-          BSC_WORK="$RUNNER_TEMP/pre" /usr/bin/python3 -m pipeline.preflight 2>&1 | tee work/logs/preflight.log
-          rc=${PIPESTATUS[0]}; cp "$RUNNER_TEMP/pre/preflight.md" work/ 2>/dev/null || true; exit $rc
 
       - name: Restore OSM seamarks of the last successful run (used only if both OSM sources fail)
         uses: actions/cache/restore@v4
@@ -138,7 +174,6 @@ jobs:
         run: |
           d="$(mktemp -d)"; mkdir -p "$d/log/shots" "$d/log/logs"
           cp work/summary.md "$d/log/" 2>/dev/null || echo "no summary" > "$d/log/summary.md"
-          cp work/preflight.md "$d/log/" 2>/dev/null || true
           cp work/shots/*.png work/shots/shots.json "$d/log/shots/" 2>/dev/null || true
           for f in work/logs/*.log; do tail -c 60000 "$f" > "$d/log/logs/$(basename "$f")"; done 2>/dev/null || true
           cp work/mid/build_log.json "$d/log/" 2>/dev/null || true
