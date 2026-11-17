@@ -226,58 +226,36 @@ def element_feature(el):
     return {"type": "Feature", "properties": tags, "geometry": geom}
 
 
-OSM_LAST = C.WORK / "osm-last" / "seamark.geojsonl"   # kept between runs by the workflow cache
+OSM_LAST = C.WORK / "osm-last"          # per-region seamarks of earlier runs, kept by the workflow cache
 
 
-def step_osm():
-    """OpenStreetMap seamarks: Overpass API, then the Geofabrik extracts. If both fail, see step_osm_fallback."""
+def osm_region_from_extract(name, url, d):
+    pbf = d / (name + ".osm.pbf")
+    sea = d / (name + "_seamark.osm.pbf")
+    out = d / (name + ".geojsonl")
+    http_get(url, pbf, tries=2, timeout=1800)
     try:
-        step_osm_overpass()
-    except RuntimeError as e:
-        print("Overpass failed (%s), falling back to Geofabrik extracts" % e, flush=True)
-        step_osm_geofabrik()
-    OSM_LAST.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy(RAW / "osm" / "seamark.geojsonl", OSM_LAST)
-    shutil.copy(RAW / "osm" / "log.json", OSM_LAST.with_name("log.json"))
+        run(["osmium", "tags-filter", "--overwrite", "-o", sea, pbf, "nwr/seamark:type"])
+    finally:
+        pbf.unlink(missing_ok=True)
+    run(["osmium", "export", "--overwrite", "-f", "geojsonseq", "-x", "print_record_separator=false",
+         "--geometry-types=point,linestring,polygon", "-a", "type,id", "-o", out, sea])
+    sea.unlink(missing_ok=True)
+    return out
 
 
-def step_osm_fallback():
-    """Used by the workflow when step_osm fails or runs out of time: the seamarks of the last successful
-    run if the cache has them, otherwise no OSM seamarks at all. The package is still built (Finnish
-    seamarks, depths and land do not depend on OSM) and sources.json / the run log say what happened."""
-    out = RAW / "osm" / "seamark.geojsonl"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    if OSM_LAST.exists():
-        shutil.copy(OSM_LAST, out)
-        prev = OSM_LAST.with_name("log.json")
-        info = json.loads(prev.read_text()) if prev.exists() else {}
-        log_step("osm", source="previous successful run (OSM sources unreachable)", previous_fetch=info.get("fetched"),
-                 features=sum(1 for _ in open(out, encoding="utf-8")), stale=True,
-                 licence="ODbL 1.0, © OpenStreetMap contributors")
-    else:
-        out.write_text("", encoding="utf-8")
-        log_step("osm", source="none: OSM sources unreachable and no earlier data", features=0, missing=True,
-                 licence="ODbL 1.0, © OpenStreetMap contributors")
-
-
-def step_osm_overpass():
-    """OpenStreetMap seamark objects (OpenSeaMap tagging) for the area, from the Overpass API."""
-    d = RAW / "osm"
-    d.mkdir(parents=True, exist_ok=True)
-    out = d / "seamark.geojsonl"
-    x0, y0, x1, y1 = C.BBOX
-    # 4 x 4 slices keep each query light enough for the public Overpass servers
-    n_slices = 4
-    xs = [x0 + (x1 - x0) * k / n_slices for k in range(n_slices + 1)]
-    ys = [y0 + (y1 - y0) * k / n_slices for k in range(n_slices + 1)]
-    seen, n, servers = set(), 0, set()
+def osm_region_from_overpass(name, box, d):
+    """Overpass in 2 x 2 slices of the region box."""
+    out = d / (name + ".geojsonl")
+    x0, y0, x1, y1 = box
+    xs, ys = [x0, (x0 + x1) / 2, x1], [y0, (y0 + y1) / 2, y1]
+    seen = set()
     with open(out, "w", encoding="utf-8") as f:
-        for i in range(n_slices):
-            for j in range(n_slices):
+        for i in range(2):
+            for j in range(2):
                 bb = "%.4f,%.4f,%.4f,%.4f" % (ys[j], xs[i], ys[j + 1], xs[i + 1])
                 q = '[out:json][timeout:300];(node["seamark:type"](%s);way["seamark:type"](%s););out geom;' % (bb, bb)
-                server, els = overpass(q)
-                servers.add(server)
+                _, els = overpass(q)
                 for el in els:
                     key = (el["type"], el["id"])
                     if key in seen:
@@ -286,35 +264,102 @@ def step_osm_overpass():
                     ft = element_feature(el)
                     if ft:
                         f.write(json.dumps(ft, ensure_ascii=False, separators=(",", ":")) + "\n")
-                        n += 1
-    log_step("osm", source="Overpass API", servers=sorted(servers), features=n,
-             licence="ODbL 1.0, © OpenStreetMap contributors")
+    return out
 
 
-def step_osm_geofabrik():
-    """Fallback: seamark objects filtered out of the Geofabrik country extracts."""
+def step_osm():
+    """OpenStreetMap seamarks region by region. Each region comes from the first source that works:
+    openstreetmap.fr extract, Geofabrik extract, Overpass API; failing all, the region's data from the
+    last successful run. The result and the source of every region are logged."""
     d = RAW / "osm"
     d.mkdir(parents=True, exist_ok=True)
+    OSM_LAST.mkdir(parents=True, exist_ok=True)
+    regions = {}
 
     def one(region):
-        name = region.replace("/", "_")
-        pbf = d / (name + ".osm.pbf")
-        sea = d / (name + "_seamark.osm.pbf")
-        http_get(C.GEOFABRIK + region + "-latest.osm.pbf", pbf, tries=3, timeout=1800)
-        run(["osmium", "tags-filter", "--overwrite", "-o", sea, pbf, "nwr/seamark:type"])
-        pbf.unlink()
-        return sea
+        name, osmfr, geofabrik, box = region
+        attempts = []
+        if osmfr:
+            attempts.append(("openstreetmap.fr", lambda: osm_region_from_extract(name, C.OSMFR + osmfr + "-latest.osm.pbf", d)))
+        attempts.append(("geofabrik", lambda: osm_region_from_extract(name, C.GEOFABRIK + geofabrik + "-latest.osm.pbf", d)))
+        attempts.append(("overpass", lambda: osm_region_from_overpass(name, box, d)))
+        errors = []
+        for src, fn in attempts:
+            try:
+                out = fn()
+                n = sum(1 for _ in open(out, encoding="utf-8"))
+                if n == 0:
+                    raise RuntimeError("no seamarks")
+                shutil.copy(out, OSM_LAST / (name + ".geojsonl"))
+                (OSM_LAST / (name + ".json")).write_text(json.dumps({"source": src, "fetched": now(), "features": n}))
+                return name, {"source": src, "features": n, "fetched": now()}
+            except Exception as e:  # noqa: BLE001
+                errors.append("%s: %s" % (src, str(e)[:160]))
+                print("  [osm %s] %s failed: %s" % (name, src, str(e)[:200]), flush=True)
+        cached = OSM_LAST / (name + ".geojsonl")
+        if cached.exists():
+            shutil.copy(cached, d / (name + ".geojsonl"))
+            info = json.loads((OSM_LAST / (name + ".json")).read_text()) if (OSM_LAST / (name + ".json")).exists() else {}
+            return name, {"source": "previous run (%s)" % info.get("source"), "fetched": info.get("fetched"),
+                          "features": info.get("features"), "stale": True, "errors": errors}
+        (d / (name + ".geojsonl")).write_text("", encoding="utf-8")
+        return name, {"source": None, "features": 0, "missing": True, "errors": errors}
 
     with cf.ThreadPoolExecutor(3) as ex:
-        parts = list(ex.map(one, C.OSM_REGIONS))
-    merged = d / "seamark.osm.pbf"
-    run(["osmium", "merge", "--overwrite", "-o", merged] + parts)
-    out = d / "seamark.geojsonl"
-    run(["osmium", "export", "--overwrite", "-f", "geojsonseq", "-x", "print_record_separator=false",
-         "--geometry-types=point,linestring,polygon", "-a", "type,id", "-o", out, merged])
-    n = sum(1 for _ in open(out, encoding="utf-8"))
-    log_step("osm", source=C.GEOFABRIK, regions=C.OSM_REGIONS, features=n,
+        for name, info in ex.map(one, C.OSM_REGIONS):
+            regions[name] = info
+    # merge, dropping objects that appear in two regions
+    seen, n = set(), 0
+    with open(d / "seamark.geojsonl", "w", encoding="utf-8") as f:
+        for name, *_ in C.OSM_REGIONS:
+            p = d / (name + ".geojsonl")
+            if not p.exists():
+                continue
+            for line in open(p, encoding="utf-8"):
+                line = line.strip().lstrip("\x1e")
+                if not line:
+                    continue
+                pr = json.loads(line).get("properties", {})
+                key = (pr.get("@type"), pr.get("@id"))
+                if key[1] is not None and key in seen:
+                    continue
+                seen.add(key)
+                f.write(line + "\n")
+                n += 1
+    log_step("osm", source="openstreetmap.fr / Geofabrik / Overpass, per region", features=n, regions=regions,
+             stale=any(r.get("stale") for r in regions.values()),
+             missing=all(r.get("missing") for r in regions.values()),
              licence="ODbL 1.0, © OpenStreetMap contributors")
+
+
+def step_osm_fallback():
+    """Used by the workflow only if step_osm crashed or ran out of time: every region from the cache."""
+    d = RAW / "osm"
+    d.mkdir(parents=True, exist_ok=True)
+    n = 0
+    with open(d / "seamark.geojsonl", "w", encoding="utf-8") as f:
+        for p in sorted(OSM_LAST.glob("*.geojsonl")) if OSM_LAST.exists() else []:
+            for line in open(p, encoding="utf-8"):
+                if line.strip():
+                    f.write(line if line.endswith("\n") else line + "\n")
+                    n += 1
+    log_step("osm", source="previous runs (OSM fetch failed)", features=n, stale=n > 0, missing=n == 0,
+             licence="ODbL 1.0, © OpenStreetMap contributors")
+
+
+EE_LAYERS = ["Beacon", "Buoy", "FairwayArea", "WaterwayLink"]
+
+
+def step_estonia():
+    """Estonian aids to navigation register (Transpordiamet), INSPIRE WFS. Max 5000 features per request."""
+    d = RAW / "estonia"
+    d.mkdir(parents=True, exist_ok=True)
+    got = {}
+    for tn in EE_LAYERS:
+        got[tn] = wfs_paged(C.EE_WFS, "TN_veetransport:TN.WaterTransportNetwork." + tn, d / (tn + ".geojsonl"),
+                            page=5000, workers=1)
+    log_step("estonia", source=C.EE_WFS, layers=got,
+             licence="Maa- ja Ruumiamet / Transpordiamet open data (CC BY 4.0 equivalent), fees: none")
 
 
 def step_land():
@@ -338,7 +383,8 @@ def step_land():
 
 
 STEPS = {"regions": step_regions, "emodnet": step_emodnet, "vayla": step_vayla,
-         "traficom": step_traficom, "osm": step_osm, "osm_fallback": step_osm_fallback, "land": step_land}
+         "traficom": step_traficom, "osm": step_osm, "osm_fallback": step_osm_fallback, "estonia": step_estonia,
+         "land": step_land}
 
 
 def main(argv):
