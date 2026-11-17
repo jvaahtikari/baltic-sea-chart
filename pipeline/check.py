@@ -9,7 +9,8 @@ from pathlib import Path
 from . import config as C
 
 # Lower limits for a full Baltic build; a much smaller count means a source failed silently.
-MIN_FEATURES = {"land": 1000, "coastline": 1000, "depth_area": 50000, "depth_contour": 50000, "seamark": 20000,
+MIN_FEATURES = {"land": 1000, "coastline": 1000, "depth_area": 1000, "depth_contour": 10000, "depth_fi_area": 50000,
+                "depth_fi_contour": 50000, "seamark": 20000,
                 "light": 3000, "light_sector": 3000, "fairway": 1000, "navline": 5000, "nodata": 1}
 
 
@@ -28,7 +29,7 @@ def main(argv):
             sizes[str(p.relative_to(C.DIST))] = round(mb, 2)
             if mb > C.MAX_FILE_MB:
                 problems.append("%s is %.1f MB (limit %d MB)" % (p.name, mb, C.MAX_FILE_MB))
-    for need in ("land.pmtiles", "chart.pmtiles", "depth.pmtiles", "style.json", "style-dark.json", "sprite.png",
+    for need in ("land.pmtiles", "chart.pmtiles", "depth.pmtiles", "depth-fi.pmtiles", "style.json", "style-dark.json", "sprite.png",
                  "index.html", "chart-style.js", "sources.json"):
         if need not in sizes:
             problems.append("missing " + need)

@@ -14,7 +14,8 @@ folder can be committed to a GitHub repository as it is.
 | --- | --- |
 | `land.pmtiles` | Vector tiles: land and coastline |
 | `chart.pmtiles` | Vector tiles: seamarks, lights, light sectors, hazards, fairways, navigation lines, traffic separation, excluded waters |
-| `depth.pmtiles` | Vector tiles: depth areas and depth contours |
+| `depth.pmtiles` | Vector tiles: depth areas and depth contours outside Finnish waters (EMODnet) and everywhere up to zoom 8 |
+| `depth-fi.pmtiles` | Vector tiles: depth areas and depth contours in Finnish waters from zoom 9 (Traficom) |
 | `style.json`, `style-dark.json` | MapLibre styles, light (S-52 day) and dark (dusk/night, for dark user interfaces); URLs relative to this folder |
 | `chart-style.js` | Helpers: load a style with absolute URLs, add the chart layers to your own map, switch light/dark in place |
 | `sprite*.png/json`, `fonts/` | Chart symbols (both themes in one sprite) and label fonts |
@@ -55,8 +56,8 @@ map.on('load', async () => {
 lightMapSwitch.onchange = e => setBalticTheme(map, e.target.checked ? 'light' : 'dark');
 ```
 
-Layer ids of the style (for `only`, `skip` and visibility toggles): `depth-area`, `depth-area-edge`,
-`depth-contour`, `depth-label`, `nodata`, `tss-area`, `tss-line`, `fairway`, `fairway-edge`, `land`,
+Layer ids of the style (for `only`, `skip` and visibility toggles): `depth-area`, `depth-area-fi`,
+`depth-area-edge`, `depth-contour`, `depth-contour-fi`, `depth-label`, `depth-label-fi`, `nodata`, `tss-area`, `tss-line`, `fairway`, `fairway-edge`, `land`,
 `coastline`, `navline`, `navline-track`, `navline-depth`, `leading-line`, `light-sector-limit`,
 `light-sector-arc`, `hazard`, `light-flare`, `seamark`, `light-label`, `seamark-name`.
 
@@ -87,12 +88,12 @@ turns them into MBTiles if your tool needs that.
 | `leading_line` | line | `bearing`, `src` (Finland only) |
 | `tss` | polygon/line | `kind` (separation_zone, separation_line, …), `src` |
 
-`depth.pmtiles`
+`depth.pmtiles` (EMODnet) and `depth-fi.pmtiles` (Traficom)
 
 | Layer | Geometry | Fields |
 | --- | --- | --- |
-| `depth_area` | polygon | `drval1`, `drval2` (depth range, m), `src` (traficom, emodnet) |
-| `depth_contour` | line | `depth` (m), `src` |
+| `depth_area` / `depth_fi_area` | polygon | `drval1`, `drval2` (depth range, m), `src` |
+| `depth_contour` / `depth_fi_contour` | line | `depth` (m), `src` |
 
 Features may also carry `minzoom`/`maxzoom`: the zoom range in which the feature is meant to be shown
 (already applied when the tiles were made). In Finnish waters EMODnet depths are shown up to zoom 8 and

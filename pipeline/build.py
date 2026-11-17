@@ -242,7 +242,7 @@ def step_depth():
 
     t0 = time.time()
     # 1. Finnish depth areas inside Finnish waters (Traficom), and their coverage for masking EMODnet.
-    w_area, w_cnt = Writer("depth_area"), Writer("depth_contour")
+    w_fi_area, w_fi_cnt = Writer("depth_fi_area"), Writer("depth_fi_contour")
     cov_path = mdir / "traficom_cover.geojsonl"
     n_fi = 0
     with open(cov_path, "w", encoding="utf-8") as cov:
@@ -257,7 +257,7 @@ def step_depth():
                 continue
             p = ft["properties"]
             d1, d2 = num(p.get("DRVAL1")), num(p.get("DRVAL2"))
-            w_area.add(g, {"drval1": d1, "drval2": d2, "src": "traficom"}, minzoom=FI_DETAIL_ZOOM)
+            w_fi_area.add(g, {"drval1": d1, "drval2": d2, "src": "traficom"}, minzoom=FI_DETAIL_ZOOM)
             cov.write(json.dumps({"type": "Feature", "properties": {}, "geometry": mapping(g)}) + "\n")
             n_fi += 1
     for ft in read_seq(tdir / "DepthContour_L.geojsonl"):
@@ -267,7 +267,9 @@ def step_depth():
         if g.is_empty or not fi_zone.contains(g.representative_point()):
             continue
         v = num(ft["properties"].get("VALDCO"))
-        w_cnt.add(g, {"depth": v, "src": "traficom"}, minzoom=max(FI_DETAIL_ZOOM + 2, contour_minzoom(v)))
+        w_fi_cnt.add(g, {"depth": v, "src": "traficom"}, minzoom=max(FI_DETAIL_ZOOM + 2, contour_minzoom(v)))
+    w_fi_area.close()
+    w_fi_cnt.close()
     LOG["traficom_depth_areas_used"] = n_fi
     say("  Traficom done (%.0f s)" % (time.time() - t0))
 
@@ -331,6 +333,7 @@ def step_depth():
     run(["gdal_translate", "-q", "-r", "average", "-outsize", "25%", "25%", "-co", "COMPRESS=DEFLATE",
          mdir / "emodnet_overview_full.tif", mdir / "emodnet_overview.tif"])
     (mdir / "emodnet_overview_full.tif").unlink()
+    w_area, w_cnt = Writer("depth_area"), Writer("depth_contour")
     depth[fi_cov] = np.nan
     write_tif(mdir / "emodnet_detail.tif", depth)
     has_data = np.isfinite(depth)
@@ -431,7 +434,7 @@ def num(v):
 def depth_minzoom(d1):
     if d1 is None:
         return 6
-    return 0 if d1 >= 50 else 3 if d1 >= 20 else 5 if d1 >= 10 else 7
+    return 0 if d1 >= 20 else 3 if d1 >= 10 else 5
 
 
 def contour_minzoom(v):
@@ -647,11 +650,11 @@ def step_marks():
         lon, lat = pt.x, pt.y
         name = tags.get("seamark:name") or tags.get("name")
         if t in HAZARDS:
-            if not aoi.contains(pt):
+            if not ok(lon, lat):
                 continue
             wl = tags.get("seamark:%s:water_level" % t)
             w_haz.add(g if g.geom_type == "Point" else pt,
-                      {"kind": t, "water_level": wl, "name": name, "src": "osm"}, minzoom=11 if t == "rock" else 10)
+                      {"kind": t, "water_level": wl, "name": name, "src": "osm"}, minzoom=13 if t == "rock" else 12)
             continue
         kind = osm_kind(t, tags)
         lit, label, cols, secs = osm_lights(tags)
@@ -766,25 +769,40 @@ def step_routes():
 
 # ---------------------------------------------------------------------------------------------
 def step_tiles():
+    """Three or four PMTiles archives, each below MAX_FILE_MB. If an archive comes out too large, it is
+    rebuilt with coarser settings (more simplification, then one zoom level less, then without its
+    optional layers), so the weekly run keeps working as the sources grow."""
     DIST.mkdir(parents=True, exist_ok=True)
     m = lambda n: MID / (n + ".geojsonl")  # noqa: E731
+    LOG["tiles_mb"], LOG["tiles_settings"] = {}, {}
 
-    def tiles(out, name, maxzoom, layers, extra):
-        run(["tippecanoe", "-q", "-o", out, "--force", "-Z0", "-z%d" % maxzoom, "--name", name,
-             "--attribution", "see sources.json", "-r1"] + extra +
-            sum([["-L", "%s:%s" % (lyr, m(lyr))] for lyr in layers], []) + ["-j", zoom_filter(layers)])
+    def tiles(fname, name, maxzoom, layers, extra, optional=(), simp=2):
+        out = DIST / fname
+        tries = [(maxzoom, simp, layers), (maxzoom, simp * 2, layers), (maxzoom - 1, simp * 2, layers)]
+        if optional:
+            tries.append((maxzoom - 1, simp * 2, [x for x in layers if x not in optional]))
+        for z, sm, lyrs in tries:
+            run(["tippecanoe", "-q", "-o", out, "--force", "-Z0", "-z%d" % z, "--name", name,
+                 "--attribution", "see sources.json", "-r1", "--simplification=%d" % sm] + extra +
+                sum([["-L", "%s:%s" % (lyr, m(lyr))] for lyr in lyrs], []) + ["-j", zoom_filter(lyrs)])
+            mb = out.stat().st_size / 1e6
+            say("  %s: %.1f MB (maxzoom %d, simplification %d, layers %s)" % (fname, mb, z, sm, ",".join(lyrs)))
+            LOG["tiles_mb"][fname] = round(mb, 1)
+            LOG["tiles_settings"][fname] = {"maxzoom": z, "simplification": sm, "layers": lyrs}
+            if mb <= C.MAX_FILE_MB:
+                return
+        say("  WARNING: %s is still over %d MB" % (fname, C.MAX_FILE_MB))
 
-    land = DIST / "land.pmtiles"
-    tiles(land, "Baltic Sea chart: land", 13, ["land", "coastline"],
-          ["--detect-shared-borders", "--no-tile-size-limit", "--simplification=2"])
-    chart = DIST / "chart.pmtiles"
-    tiles(chart, "Baltic Sea chart: seamarks and routes", 14,
+    tiles("land.pmtiles", "Baltic Sea chart: land", 13, ["land", "coastline"],
+          ["--detect-shared-borders", "--no-tile-size-limit"])
+    tiles("chart.pmtiles", "Baltic Sea chart: seamarks and routes", 14,
           ["nodata", "seamark", "light", "light_sector", "hazard", "fairway", "navline", "leading_line", "tss"],
-          ["--no-tile-size-limit", "--no-feature-limit", "--simplification=2"])
-    depth = DIST / "depth.pmtiles"
-    tiles(depth, "Baltic Sea chart: depth", 12, ["depth_area", "depth_contour"],
-          ["--detect-shared-borders", "--no-tile-size-limit", "--simplification=4"])
-    LOG["tiles_mb"] = {p.name: round(p.stat().st_size / 1e6, 1) for p in (land, chart, depth)}
+          ["--no-tile-size-limit", "--no-feature-limit"])
+    tiles("depth.pmtiles", "Baltic Sea chart: depth (EMODnet)", 12, ["depth_area", "depth_contour"],
+          ["--detect-shared-borders", "--no-tile-size-limit"], simp=4)
+    tiles("depth-fi.pmtiles", "Baltic Sea chart: depth in Finnish waters (Traficom)", 12,
+          ["depth_fi_area", "depth_fi_contour"], ["--detect-shared-borders", "--no-tile-size-limit"],
+          optional=("depth_fi_contour",), simp=4)
     say("  tiles MB:", LOG["tiles_mb"])
 
 

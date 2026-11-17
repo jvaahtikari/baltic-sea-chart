@@ -68,7 +68,7 @@ btn.onclick = () => { theme = themes[(themes.indexOf(theme) + 1) % themes.length
 if (theme !== 'auto') map.once('load', applyTheme);
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (theme === 'auto') applyTheme(); });
 
-const clickable = ['seamark', 'light-flare', 'hazard', 'navline', 'fairway', 'depth-area'];
+const clickable = ['seamark', 'light-flare', 'hazard', 'navline', 'fairway', 'depth-area-fi', 'depth-area'];
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 map.on('click', e => {
   const f = map.queryRenderedFeatures(e.point, { layers: clickable })[0];

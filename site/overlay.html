@@ -47,7 +47,7 @@ map.on('load', async () => {
   await addBalticLayers(map, { theme, beforeId: 'vessels' });
 });
 const groups = {
-  depth: ['depth-area', 'depth-area-edge', 'depth-contour', 'depth-label'],
+  depth: ['depth-area', 'depth-area-fi', 'depth-area-edge', 'depth-contour', 'depth-contour-fi', 'depth-label', 'depth-label-fi'],
   marks: ['seamark', 'light-flare', 'light-label', 'light-sector-arc', 'light-sector-limit', 'seamark-name', 'hazard'],
 };
 for (const [btn, ids] of Object.entries(groups)) {
