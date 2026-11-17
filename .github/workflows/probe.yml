@@ -13,13 +13,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { persist-credentials: false }
-      - name: Probe
-        run: mkdir -p /tmp/p && cd /tmp/p && bash "$GITHUB_WORKSPACE/.github/probe/sources.sh" /tmp/p/probe.md || true
+      - name: Fetch the authority seamark sources with the pipeline's own code (raw data for local tuning)
+        run: |
+          mkdir -p /tmp/p
+          BSC_WORK=/tmp/pw python3 -m pipeline.fetch estonia germany 2>&1 | tail -20 > /tmp/p/probe.md || true
+          mkdir -p /tmp/p/raw && cp -r /tmp/pw/raw/estonia /tmp/pw/raw/germany /tmp/p/raw/ 2>/dev/null; gzip -r /tmp/p/raw || true
       - name: Publish to branch probe-log
         if: always()
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
-          d="$(mktemp -d)"; cp /tmp/p/probe.md "$d/probe.md" || echo none > "$d/probe.md"
+          d="$(mktemp -d)"; cp -r /tmp/p/. "$d/" || echo none > "$d/probe.md"
           cd "$d"; git init -q -b probe-log
           git config user.name "github-actions[bot]"; git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A; git commit -q -m "probe ${GITHUB_RUN_ID}"

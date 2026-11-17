@@ -12,3 +12,4 @@ done
 for t in $(grep -o '<Name>[^<]*' caps.xml | sed 's/<Name>//' | head -40); do
   h "sample $t"; get "$B?service=WFS&version=2.0.0&request=GetFeature&typeNames=$t&count=2&outputFormat=application/json&srsName=EPSG:4326" | head -c 1800; echo
 done
+# 2026-11-17 raw seamark data
