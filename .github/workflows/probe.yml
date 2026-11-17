@@ -1,0 +1,30 @@
+name: Lähteiden selvitys (probe)
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["tools/probe.sh", ".github/workflows/probe.yml"]
+permissions:
+  contents: write
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - name: Työkalut
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq gdal-bin file >/dev/null
+      - name: Selvitys
+        run: mkdir -p /tmp/p && cd /tmp/p && bash "$GITHUB_WORKSPACE/tools/probe.sh" /tmp/p/probe.md || true
+      - name: Julkaise haaraan ajoloki
+        if: always()
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          d="$(mktemp -d)"; mkdir -p "$d/ajoloki"; cp /tmp/p/probe.md "$d/ajoloki/probe.md" || echo "ei tulosta" > "$d/ajoloki/probe.md"
+          cd "$d"; git init -q -b ajoloki-probe
+          git config user.name "github-actions[bot]"; git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A; git commit -q -m "probe ${GITHUB_RUN_ID}"
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          otsake="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${otsake}" push --force origin ajoloki-probe
