@@ -110,22 +110,23 @@ def main():
         kinds, labels = collections.Counter(), []
         gd = C.RAW / "germany"
         for cl in B.DE_CLASS_KIND:
-            lit = set()
+            lit = {}
             pl = gd / ("%s_lights.geojsonl" % cl)
             pm = gd / ("%s_%s.geojsonl" % (cl, cl.lower()))
             for ft in (B.read_seq(pl) if pl.exists() else []):
                 p = ft["properties"]
                 pt = B.point_of(ft)
                 if pt is not None:
-                    lit.add((round(pt.x, 5), round(pt.y, 5)))
+                    k = (round(pt.x, 5), round(pt.y, 5))
+                    lit[k] = max(lit.get(k, 0), B.num(p.get("valnmr")) or 0.001)
                 if len(labels) < 6:
                     labels.append(B.light_label(B.s57_litchr(p.get("litchr")) + str(p.get("siggrp") or "")
                                                 .replace("()", "").replace("(1)", ""),
                                                 B.s57_colours(p.get("colour")), p.get("sigper")))
             for ft in (B.read_seq(pm) if pm.exists() else []):
                 pt = B.point_of(ft)
-                on = pt is not None and (round(pt.x, 5), round(pt.y, 5)) in lit
-                kinds[B.s57_mark(cl, ft["properties"], on)] += 1
+                rng = lit.get((round(pt.x, 5), round(pt.y, 5))) if pt is not None else None
+                kinds[B.s57_mark(cl, ft["properties"], rng)] += 1
         n = sum(v for (k, c), v in kinds.items() if k)
         if n == 0:
             raise RuntimeError("no marks")

@@ -583,6 +583,13 @@ def osm_lights(tags):
     return lit, light_label(chr_, colours, period, group) if lit else None, colours, sectors
 
 
+def osm_range(tags):
+    """Longest nominal range (NM) over seamark:light:range and the numbered light entries."""
+    vals = [num(v) for k, v in tags.items() if re.match(r"^seamark:light:(\d+:)?range$", k)]
+    vals = [v for v in vals if v is not None]
+    return max(vals) if vals else None
+
+
 def step_marks():
     A = load_areas()
     aoi, fi_zone = A["aoi"], A["fi_zone"]
@@ -647,7 +654,25 @@ def step_marks():
     ee_zone = A.get("ee_zone")
     if ee_zone is not None and not ee_zone.is_empty:
         shapely.prepare(ee_zone)
-    n_ee = 0
+    # The register's names give the category for cardinals, isolated dangers and many lateral marks, but
+    # numbered channel marks ('Heltermaa 3') only carry a number. For those the category of the OSM mark at
+    # the same position (within about 60 m) is used: the position stays the authority's.
+    ee_osm, ee_osm_cat = [], []
+    if ee_zone is not None and not ee_zone.is_empty and (RAW / "osm" / "seamark.geojsonl").exists():
+        ex0, ey0, ex1, ey1 = ee_zone.bounds
+        for ft in read_seq(RAW / "osm" / "seamark.geojsonl"):
+            t = ft["properties"].get("seamark:type", "")
+            if not (t.startswith("buoy_") or t.startswith("beacon_")) or not ft.get("geometry"):
+                continue
+            pt = point_of(ft)
+            if pt is None or not (ex0 <= pt.x <= ex1 and ey0 <= pt.y <= ey1):
+                continue
+            c = osm_category(t, ft["properties"])
+            if c and c != "none":
+                ee_osm.append(pt)
+                ee_osm_cat.append(c)
+    ee_tree = shapely.STRtree(ee_osm) if ee_osm else None
+    n_ee = n_ee_osmcat = 0
     for layer in ("Beacon", "Buoy"):
         p_ = RAW / "estonia" / (layer + ".geojsonl")
         if not p_.exists():
@@ -658,10 +683,15 @@ def step_marks():
                 continue
             name = ft["properties"].get("geographicalname_geographicalname_spelling_spellingofname_text")
             kind, cat = estonian_mark(name, layer)
+            if cat == "none" and kind in ("buoy", "spar", "beacon") and ee_tree is not None:
+                i = ee_tree.query_nearest(pt, max_distance=0.0008)
+                if len(i):
+                    cat = ee_osm_cat[int(i[0])]
+                    n_ee_osmcat += 1
             w_mark.add(pt, {"kind": kind, "cat": cat, "name": name, "ref": ft["properties"].get("inspireid_identifier_localid"),
                             "src": "ee"}, minzoom=mark_minzoom(kind))
             n_ee += 1
-    LOG["estonia_marks"] = n_ee
+    LOG["estonia_marks"], LOG["estonia_category_from_osm"] = n_ee, n_ee_osmcat
     use_ee = n_ee > 0 and ee_zone is not None and not ee_zone.is_empty
 
     # --- Germany: BSH navigation marks and lights (S-57 attributes)
@@ -670,42 +700,56 @@ def step_marks():
         shapely.prepare(de_zone)
     gd = RAW / "germany"
     n_de = n_de_l = 0
+    in_de = (lambda pt: de_zone.contains(pt)) if de_zone is not None and not de_zone.is_empty else (lambda pt: False)
+
+    def xy5(pt):
+        return round(pt.x, 5), round(pt.y, 5)
+    # BSH covers the whole region (Russian, Danish, Swedish lights too); only German waters are taken from
+    # it. Wind turbines are landmarks with lights in S-57 (CATLMK 19): neither marks nor lights here.
+    wind = set()
+    if (gd / "LNDMRK_lndmrk.geojsonl").exists():
+        for ft in read_seq(gd / "LNDMRK_lndmrk.geojsonl"):
+            pt = point_of(ft)
+            if pt is not None and "19" in str(ft["properties"].get("catlmk") or "").split(","):
+                wind.add(xy5(pt))
     for cl in DE_CLASS_KIND:
         pm = gd / ("%s_%s.geojsonl" % (cl, cl.lower()))
         pl = gd / ("%s_lights.geojsonl" % cl)
-        lit_at = set()
+        lit_at = {}
         if pl.exists():
             for ft in read_seq(pl):
                 pt = point_of(ft)
-                if pt is None or not aoi.contains(pt) or not ok(pt.x, pt.y):
+                if pt is None or not in_de(pt) or not ok(pt.x, pt.y) or xy5(pt) in wind:
                     continue
                 p = ft["properties"]
                 cols = s57_colours(p.get("colour"))
                 lbl = light_label(s57_litchr(p.get("litchr")) + (p.get("siggrp") or "").replace("()", "").replace("(1)", ""), cols,
                                   p.get("sigper"))
-                major = (num(p.get("valnmr")) or 0) >= 15
+                rng = num(p.get("valnmr"))
+                major = (rng or 0) >= 15
                 w_light.add(pt, {"label": lbl, "colour": "".join(cols) or "W", "height": num(p.get("height")),
-                                 "range": num(p.get("valnmr")), "major": major, "src": "de"}, minzoom=8 if major else 10)
+                                 "range": rng, "major": major, "src": "de"}, minzoom=8 if major else 10)
                 s1, s2 = num(p.get("sectr1")), num(p.get("sectr2"))
                 if s1 is not None and s2 is not None:
                     arc, legs = sector_geoms(pt.x, pt.y, s1, s2)
                     w_sect.add(arc, {"colour": cols[0] if cols else "W", "part": "arc", "src": "de"}, minzoom=12)
                     for leg in legs:
                         w_sect.add(leg, {"colour": cols[0] if cols else "W", "part": "limit", "src": "de"}, minzoom=13)
-                lit_at.add((round(pt.x, 5), round(pt.y, 5)))
+                k = xy5(pt)
+                lit_at[k] = max(lit_at.get(k, 0), rng or 0.001)
                 n_de_l += 1
         if not pm.exists():
             continue
         for ft in read_seq(pm):
             pt = point_of(ft)
-            if pt is None or not aoi.contains(pt) or not ok(pt.x, pt.y):
+            if pt is None or not in_de(pt) or not ok(pt.x, pt.y) or xy5(pt) in wind:
                 continue
             p = ft["properties"]
-            lit = (round(pt.x, 5), round(pt.y, 5)) in lit_at
-            kind, cat = s57_mark(cl, p, lit)
+            rng = lit_at.get(xy5(pt))
+            kind, cat = s57_mark(cl, p, rng)
             if kind is None:
                 continue
-            w_mark.add(pt, {"kind": kind, "cat": cat, "name": p.get("objnam"), "lit": lit, "src": "de"},
+            w_mark.add(pt, {"kind": kind, "cat": cat, "name": p.get("objnam"), "lit": rng is not None, "src": "de"},
                        minzoom=mark_minzoom(kind))
             n_de += 1
     LOG["germany_marks"], LOG["germany_lights"] = n_de, n_de_l
@@ -740,9 +784,13 @@ def step_marks():
                             "lit": lit, "topmark": any(k.startswith("seamark:topmark") for k in tags), "src": "osm"},
                        minzoom=mark_minzoom(kind))
         if lit:
-            major = t in ("light_major", "light_vessel")
+            rng = osm_range(tags)
+            # light_major is used unevenly across countries (rare in Latvia), so lighthouses and long-range
+            # lights count as major too
+            major = (t in ("light_major", "light_vessel") or tags.get("man_made") == "lighthouse"
+                     or (rng or 0) >= 15)
             w_light.add(pt, {"label": label, "colour": "".join(cols) or "W",
-                             "height": num(tags.get("seamark:light:height")), "range": num(tags.get("seamark:light:range")),
+                             "height": num(tags.get("seamark:light:height")), "range": rng,
                              "major": major, "src": "osm"}, minzoom=8 if major else 10)
             for s0, s1, col in secs:
                 arc, legs = sector_geoms(lon, lat, s0, s1)
@@ -793,12 +841,19 @@ def s57_litchr(v):
 
 
 def s57_mark(cl, p, lit):
-    """(kind, IALA category) for a BSH S-57 object."""
+    """(kind, IALA category) for a BSH S-57 object. lit: nominal range of the light at the object (NM, a
+    small positive number if unknown) or None if the object carries no light."""
     t = DE_CLASS_KIND[cl]
     if cl == "LNDMRK":
-        if not lit:
+        if lit is None:
             return None, None          # towers, churches etc. without a light are not chart aids here
-        return "lighthouse", "none"
+        cats = str(p.get("catlmk") or "").split(",")
+        if "19" in cats:               # wind turbine
+            return None, None
+        # a lighthouse is a tower carrying a light of some range; a light on a mast, pile or pierhead is a light
+        if lit >= 15 or ("17" in cats and lit >= 10):
+            return "lighthouse", "none"
+        return "light", "none"
     if cl.startswith("BOY"):
         kind = "spar" if str(p.get("boyshp")) in ("4", "5") else "buoy"
     else:
@@ -841,8 +896,11 @@ def estonian_mark(name, layer):
         cat = "port"
     else:
         m = re.search(r"(põhja|lõuna|ida|lääne)(poi|tooder)", n)
+        m2 = re.search(r"\b([nesw]) (poi|tooder)\b", n)
         if m:
             cat = EE_CARDINAL[m.group(1)]
+        elif m2:
+            cat = {"n": "north", "e": "east", "s": "south", "w": "west"}[m2.group(1)]
         elif re.search(r"eraldiasuva ohu|ohu ?(poi|tooder)|üksikohu", n):
             cat = "isolated_danger"
         elif re.search(r"telje ?(poi|tooder)|telg", n):

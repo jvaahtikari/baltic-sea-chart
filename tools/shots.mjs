@@ -7,7 +7,8 @@ export const PLACES = [
   ['overview', 20.5, 59.5, 4.6], ['gulf_of_finland_east', 27.3, 60.1, 8.5], ['helsinki', 24.95, 60.13, 11],
   ['helsinki_detail', 24.975, 60.115, 14], ['turku_archipelago', 21.9, 60.2, 10], ['aland', 19.95, 60.1, 10],
   ['stockholm', 18.6, 59.35, 10], ['tallinn', 24.75, 59.47, 11], ['riga', 24.0, 57.1, 9],
-  ['klaipeda', 21.1, 55.7, 10], ['gdansk', 18.7, 54.45, 10], ['kiel', 10.2, 54.4, 10],
+  ['klaipeda', 21.1, 55.7, 10], ['gdansk', 18.7, 54.45, 10], ['kiel', 10.2, 54.4, 10], ['kiel_detail', 10.17, 54.38, 12.5],
+  ['rostock', 12.1, 54.18, 12], ['riga_port', 24.03, 57.05, 11], ['parnu', 24.45, 58.33, 11], ['muuga', 24.95, 59.52, 12.5],
   ['copenhagen', 12.65, 55.7, 11], ['kattegat', 11.5, 57.0, 8], ['oulu', 25.3, 65.05, 10],
 ];
 fs.mkdirSync(out, { recursive: true });
