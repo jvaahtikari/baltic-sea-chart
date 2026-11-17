@@ -81,7 +81,7 @@ turns them into MBTiles if your tool needs that.
 | `nodata` | polygon | `reason`, `territory` (waters left out of the package) |
 | `seamark` | point | `kind` (spar, buoy, beacon, cairn, leading_mark, light, lighthouse, daymark, racon, light_float, other), `cat` (port, starboard, north, south, east, west, isolated_danger, safe_water, special, none; IALA region A), `name`, `ref`, `lit`, `topmark`, `src` |
 | `light` | point | `label` (e.g. `Fl(2)WRG 6s`), `colour` (W, R, G, Y, Bu letters), `height` (m), `range` (nm), `major`, `ref`, `src` |
-| `light_sector` | line | `colour`, `part` (arc, limit), `src`; arcs are drawn at a fixed 450 m radius |
+| `light_sector` | line | `colour`, `part` (arc, limit), `src`; arcs are drawn at a fixed 250 m radius |
 | `hazard` | point | `kind` (rock, wreck, obstruction), `water_level`, `name`, `src` |
 | `fairway` | polygon | `depth` (design draught, m), `kind`, `name`, `src` |
 | `navline` | line | `depth`, `bearing` (true), `kind`, `name`, `src` |

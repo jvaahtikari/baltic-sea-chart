@@ -493,7 +493,7 @@ def light_label(chr_, colours, period=None, group=None):
     return " ".join(p for p in parts if p) or None
 
 
-def sector_geoms(lon, lat, start, end, radius_m=450.0):
+def sector_geoms(lon, lat, start, end, radius_m=250.0):
     """Arc and two limit legs for a light sector. Angles are bearings from seaward towards the
     light (as in the lists of lights), so the arc lies on the opposite side of the light."""
     a0 = (start + 180.0) % 360.0

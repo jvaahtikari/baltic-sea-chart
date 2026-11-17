@@ -185,14 +185,14 @@ AREA_SEAMARKS = {"fairway", "dredged_area", "separation_zone", "inshore_traffic_
                  "seaplane_landing_area", "marine_farm", "dumping_ground", "military_area", "obstruction", "wreck", "rock"}
 
 
-def overpass(query, tries_per_server=2):
+def overpass(query, tries_per_server=1):
     data = urllib.parse.urlencode({"data": query}).encode()
     last = None
     for server in C.OVERPASS:
         for i in range(tries_per_server):
             try:
                 req = urllib.request.Request(server, data=data, headers={"User-Agent": C.USER_AGENT})
-                with urllib.request.urlopen(req, timeout=1200) as r:
+                with urllib.request.urlopen(req, timeout=400) as r:
                     j = json.loads(r.read())
                 if "elements" not in j:
                     raise RuntimeError("no elements: %s" % str(j)[:200])
@@ -202,7 +202,7 @@ def overpass(query, tries_per_server=2):
             except Exception as e:  # noqa: BLE001
                 last = e
                 print("  overpass %s attempt %d: %s" % (server, i + 1, e), flush=True)
-                time.sleep(30 * (i + 1))
+                time.sleep(10)
     raise RuntimeError("all Overpass servers failed: %s" % last)
 
 
@@ -229,16 +229,17 @@ def step_osm():
     d.mkdir(parents=True, exist_ok=True)
     out = d / "seamark.geojsonl"
     x0, y0, x1, y1 = C.BBOX
-    # four slices keep each response moderate
-    xs = [x0, (x0 + x1) / 2, x1]
-    ys = [y0, (y0 + y1) / 2, y1]
+    # 4 x 4 slices keep each query light enough for the public Overpass servers
+    n_slices = 4
+    xs = [x0 + (x1 - x0) * k / n_slices for k in range(n_slices + 1)]
+    ys = [y0 + (y1 - y0) * k / n_slices for k in range(n_slices + 1)]
     seen, n, servers = set(), 0, set()
     try:
         with open(out, "w", encoding="utf-8") as f:
-            for i in range(2):
-                for j in range(2):
+            for i in range(n_slices):
+                for j in range(n_slices):
                     bb = "%.4f,%.4f,%.4f,%.4f" % (ys[j], xs[i], ys[j + 1], xs[i + 1])
-                    q = '[out:json][timeout:900][maxsize:1073741824];(node["seamark:type"](%s);way["seamark:type"](%s););out geom;' % (bb, bb)
+                    q = '[out:json][timeout:300];(node["seamark:type"](%s);way["seamark:type"](%s););out geom;' % (bb, bb)
                     server, els = overpass(q)
                     servers.add(server)
                     for el in els:
