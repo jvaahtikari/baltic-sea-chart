@@ -180,11 +180,87 @@ def run(cmd, **kw):
     subprocess.run(list(map(str, cmd)), check=True, **kw)
 
 
+AREA_SEAMARKS = {"fairway", "dredged_area", "separation_zone", "inshore_traffic_zone", "precautionary_area",
+                 "restricted_area", "anchorage", "harbour", "production_area", "cable_area", "pipeline_area",
+                 "seaplane_landing_area", "marine_farm", "dumping_ground", "military_area", "obstruction", "wreck", "rock"}
+
+
+def overpass(query, tries_per_server=2):
+    data = urllib.parse.urlencode({"data": query}).encode()
+    last = None
+    for server in C.OVERPASS:
+        for i in range(tries_per_server):
+            try:
+                req = urllib.request.Request(server, data=data, headers={"User-Agent": C.USER_AGENT})
+                with urllib.request.urlopen(req, timeout=1200) as r:
+                    j = json.loads(r.read())
+                if "elements" not in j:
+                    raise RuntimeError("no elements: %s" % str(j)[:200])
+                if j.get("remark") and "error" in j["remark"].lower():
+                    raise RuntimeError(j["remark"][:300])
+                return server, j["elements"]
+            except Exception as e:  # noqa: BLE001
+                last = e
+                print("  overpass %s attempt %d: %s" % (server, i + 1, e), flush=True)
+                time.sleep(30 * (i + 1))
+    raise RuntimeError("all Overpass servers failed: %s" % last)
+
+
+def element_feature(el):
+    tags = dict(el.get("tags", {}))
+    tags["@type"], tags["@id"] = el["type"], el["id"]
+    if el["type"] == "node":
+        geom = {"type": "Point", "coordinates": [el["lon"], el["lat"]]}
+    elif el["type"] == "way" and el.get("geometry"):
+        coords = [[p["lon"], p["lat"]] for p in el["geometry"]]
+        closed = len(coords) >= 4 and coords[0] == coords[-1]
+        if closed and tags.get("seamark:type") in AREA_SEAMARKS:
+            geom = {"type": "Polygon", "coordinates": [coords]}
+        else:
+            geom = {"type": "LineString", "coordinates": coords}
+    else:
+        return None
+    return {"type": "Feature", "properties": tags, "geometry": geom}
+
+
 def step_osm():
-    """OpenStreetMap seamark objects (OpenSeaMap tagging) from the Geofabrik extracts."""
+    """OpenStreetMap seamark objects (OpenSeaMap tagging) for the area, from the Overpass API."""
     d = RAW / "osm"
     d.mkdir(parents=True, exist_ok=True)
-    parts = []
+    out = d / "seamark.geojsonl"
+    x0, y0, x1, y1 = C.BBOX
+    # four slices keep each response moderate
+    xs = [x0, (x0 + x1) / 2, x1]
+    ys = [y0, (y0 + y1) / 2, y1]
+    seen, n, servers = set(), 0, set()
+    try:
+        with open(out, "w", encoding="utf-8") as f:
+            for i in range(2):
+                for j in range(2):
+                    bb = "%.4f,%.4f,%.4f,%.4f" % (ys[j], xs[i], ys[j + 1], xs[i + 1])
+                    q = '[out:json][timeout:900][maxsize:1073741824];(node["seamark:type"](%s);way["seamark:type"](%s););out geom;' % (bb, bb)
+                    server, els = overpass(q)
+                    servers.add(server)
+                    for el in els:
+                        key = (el["type"], el["id"])
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        ft = element_feature(el)
+                        if ft:
+                            f.write(json.dumps(ft, ensure_ascii=False, separators=(",", ":")) + "\n")
+                            n += 1
+        log_step("osm", source="Overpass API", servers=sorted(servers), features=n,
+                 licence="ODbL 1.0, © OpenStreetMap contributors")
+    except RuntimeError as e:
+        print("Overpass failed (%s), falling back to Geofabrik extracts" % e, flush=True)
+        step_osm_geofabrik()
+
+
+def step_osm_geofabrik():
+    """Fallback: seamark objects filtered out of the Geofabrik country extracts."""
+    d = RAW / "osm"
+    d.mkdir(parents=True, exist_ok=True)
 
     def one(region):
         name = region.replace("/", "_")

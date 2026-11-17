@@ -32,7 +32,13 @@ EMODNET_CHUNK_DEG = 2.0
 VAYLA_WFS = "https://avoinapi.vaylapilvi.fi/vaylatiedot/ows"
 TRAFICOM_WFS = "https://julkinen.traficom.fi/inspirepalvelu/rajoitettu/wfs"
 
-# OpenStreetMap
+# OpenStreetMap. Seamarks come from the Overpass API (only the seamark objects, a few tens of MB);
+# the Geofabrik extracts are the fallback if every Overpass server fails.
+OVERPASS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
+]
 GEOFABRIK = "https://download.geofabrik.de/europe/"
 OSM_REGIONS = [
     "finland", "sweden", "denmark", "estonia", "latvia", "lithuania",
