@@ -13,30 +13,45 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { persist-credentials: false }
-      - name: Install osmium
-        run: sudo apt-get -o Acquire::Retries=3 update -qq && sudo apt-get install -y -qq --no-install-recommends osmium-tool
-      - name: Fetch OSM seamarks of Estonia and Latvia with the pipeline's own code (raw data for local tuning)
+      - name: Install tools
+        run: |
+          sudo apt-get -o Acquire::Retries=3 update -qq
+          sudo apt-get install -y -qq --no-install-recommends osmium-tool gdal-bin python3-gdal python3-numpy python3-shapely python3-pyproj
+      - name: Which Latvian lights does the build's land test drop, and why (real land polygons and OSM data)
         timeout-minutes: 25
         run: |
-          mkdir -p /tmp/p/raw/osm /tmp/pw
-          BSC_WORK=/tmp/pw python3 - <<'PY' 2>&1 | tail -30 > /tmp/p/probe.md || true
-          import pathlib, shutil
+          mkdir -p /tmp/p /tmp/pw/raw/land /tmp/pw/raw/osm
+          BSC_WORK=/tmp/pw python3 - <<'PY' > /tmp/p/probe.md 2>&1 || true
+          import json, subprocess
           from pipeline import config as C, fetch as F
-          d = pathlib.Path("/tmp/p/raw/osm")
-          for name, osmfr, geofabrik, box in C.OSM_REGIONS:
-              if name not in ("estonia", "latvia"):
+          d = C.RAW / "land"
+          z = d / "land.zip"
+          F.http_get(C.OSMDATA + "land-polygons-complete-4326.zip", z, timeout=1800)
+          subprocess.run(["ogr2ogr", "-f", "GeoJSONSeq", "-overwrite", str(d / "land.geojsonl"),
+                          "/vsizip/%s/land-polygons-complete-4326/land_polygons.shp" % z,
+                          "-clipsrc", "20.5", "56.0", "25.0", "58.2", "-explodecollections", "-lco", "RS=NO"], check=True)
+          F.osm_region_from_extract("latvia", C.GEOFABRIK + "europe/latvia-latest.osm.pbf", C.RAW / "osm")
+          from pipeline import build as B
+          from shapely.geometry import shape, Point
+          import shapely
+          L = B.LandIndex()
+          print("| name | type | geom | keep | m to coast |")
+          print("| --- | --- | --- | --- | ---: |")
+          for line in open(C.RAW / "osm" / "latvia.geojsonl"):
+              ft = json.loads(line)
+              p = ft["properties"]
+              lit = B.osm_lights(p)[0]
+              if not lit or not (p.get("man_made") == "lighthouse" or (B.osm_range(p) or 0) >= 10):
                   continue
-              for how in ("extract", "overpass"):
-                  try:
-                      if how == "extract":
-                          F.osm_region_from_extract(name, C.GEOFABRIK + geofabrik + "-latest.osm.pbf", d)
-                      else:
-                          F.osm_region_from_overpass(name, box, d)
-                      print(name, how, "ok"); break
-                  except Exception as e:
-                      print(name, how, "failed", str(e)[:200])
+              g = shape(ft["geometry"])
+              pt = g if g.geom_type == "Point" else g.representative_point()
+              x, y = B._to_laea.transform(pt.x, pt.y)
+              q = Point(x, y)
+              on_land = len(L.land_tree.query(q, predicate="intersects")) > 0
+              dist = min((L.coast_tree.geometries[i].distance(q) for i in L.coast_tree.query(q.buffer(20000))), default=-1)
+              print("| %s | %s | %s | %s | %d |" % (p.get("name") or p.get("seamark:name"), p.get("seamark:type"), g.geom_type,
+                                                   L.keep(pt.x, pt.y), dist if on_land else 0))
           PY
-          gzip -r /tmp/p/raw || true
 
       - name: Publish to branch probe-log
         if: always()
