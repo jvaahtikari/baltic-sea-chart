@@ -23,7 +23,7 @@ const svg = (w, h, body) => `<svg xmlns="http://www.w3.org/2000/svg" width="${w}
 // Mark canvas 20 x 52: shaft 10..24, position circle at (10, 26).
 function bands(cat) {
   return { port: ['r'], starboard: ['g'], north: ['b', 'y'], south: ['y', 'b'], west: ['y', 'b', 'y'], east: ['b', 'y', 'b'],
-    isolated_danger: ['b', 'r', 'b'], safe_water: ['rw'], special: ['y'], none: ['b'] }[cat] || ['b'];
+    isolated_danger: ['b', 'r', 'b'], safe_water: ['rw'], special: ['y'], none: ['p'] }[cat] || ['p'];
 }
 function topmark(cat) {
   const f = ` fill="${INK}"`;
@@ -50,6 +50,8 @@ function mark(cat) {
   bs.forEach((c, i) => {
     const y = top + i * h;
     if (c === 'rw') s += `<rect x="8.5" y="${y}" width="1.5" height="${h}" fill="${EC.r}"/><rect x="10" y="${y}" width="1.5" height="${h}" fill="#fff"/>`;
+    // 'p': colour not known from the source (e.g. a numbered channel mark), drawn hollow rather than guessed
+    else if (c === 'p') s += `<rect x="8.5" y="${y}" width="3" height="${h}" fill="${PAPER}"/>`;
     else s += `<rect x="8.5" y="${y}" width="3" height="${h}" fill="${EC[c]}"/>`;
   });
   s += `<rect x="8.5" y="${top}" width="3" height="${y1 - top}" fill="none" stroke="${INK}" stroke-width=".6"/>`;

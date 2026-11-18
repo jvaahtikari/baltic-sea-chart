@@ -102,6 +102,9 @@ Traficom depths from zoom 9.
 `src` tells where a feature comes from: `fi` = Väylävirasto, `ee` = Transpordiamet (Estonia), `de` = BSH (Germany), `traficom` = Traficom, `osm` = OpenStreetMap,
 `emodnet` = EMODnet Bathymetry.
 
+A seamark with `cat` = `none` is drawn hollow: the source does not say which kind of mark it is. This is
+mostly the case for numbered channel marks in the Estonian register, whose names carry only a number.
+
 ## Licences and attribution
 
 Show the attribution texts of `style.json` (MapLibre's attribution control does it) or of

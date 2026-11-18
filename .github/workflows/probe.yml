@@ -35,22 +35,21 @@ jobs:
           from shapely.geometry import shape, Point
           import shapely
           L = B.LandIndex()
-          print("| name | type | geom | keep | m to coast |")
-          print("| --- | --- | --- | --- | ---: |")
-          for line in open(C.RAW / "osm" / "latvia.geojsonl"):
-              ft = json.loads(line)
-              p = ft["properties"]
-              lit = B.osm_lights(p)[0]
-              if not lit or not (p.get("man_made") == "lighthouse" or (B.osm_range(p) or 0) >= 10):
-                  continue
-              g = shape(ft["geometry"])
-              pt = g if g.geom_type == "Point" else g.representative_point()
-              x, y = B._to_laea.transform(pt.x, pt.y)
+          print("land polygons", len(L.land), "coast pieces", len(L.coast_tree.geometries))
+          for name, lon, lat in (("Daugavgriva front beacon", 24.02175, 57.0600833), ("Daugavgriva lighthouse", 24.0237, 57.0597),
+                                 ("Irbe", 21.7230417, 57.7507167), ("Kolka", 22.5917, 57.7566)):
+              x, y = B._to_laea.transform(lon, lat)
               q = Point(x, y)
-              on_land = len(L.land_tree.query(q, predicate="intersects")) > 0
-              dist = min((L.coast_tree.geometries[i].distance(q) for i in L.coast_tree.query(q.buffer(20000))), default=-1)
-              print("| %s | %s | %s | %s | %d |" % (p.get("name") or p.get("seamark:name"), p.get("seamark:type"), g.geom_type,
-                                                   L.keep(pt.x, pt.y), dist if on_land else 0))
+              hits = L.land_tree.query(q, predicate="intersects")
+              print("##", name, "keep", L.keep(lon, lat), "in land polygons", list(hits))
+              for i in hits:
+                  g = L.land[int(i)]
+                  print("  polygon", int(i), g.geom_type, "area km2 %.0f" % (g.area / 1e6), "rings", len(shapely.get_rings(g)),
+                        "vertices", shapely.get_num_coordinates(g), "dist to boundary m %.0f" % g.boundary.distance(q),
+                        "bounds", [round(v) for v in g.bounds])
+              near = L.coast_tree.query(q.buffer(5000))
+              print("  coast pieces within 5 km (envelope)", len(near), "min dist %s" % (min((L.coast_tree.geometries[i].distance(q) for i in near), default=None)))
+              print("  dwithin 600", list(L.coast_tree.query(q, predicate="dwithin", distance=600))[:5])
           PY
 
       - name: Publish to branch probe-log

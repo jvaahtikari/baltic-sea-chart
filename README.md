@@ -53,7 +53,11 @@ piirretään koko rajauslaatikkoon, myös Venäjän puolelle, koska muuten ranni
 Merimerkit tulevat viranomaisilta siellä, missä ne ovat avoimesti saatavilla: Suomessa Väylävirastolta,
 Virossa Transpordiametilta ja Saksassa BSH:lta. Muualla (Ruotsi, Tanska, Latvia, Liettua, Puola)
 käytetään OpenStreetMapin merimerkkejä, joiden kattavuus ja ajantasaisuus vaihtelevat maittain. Viron
-rekisterissä ei ole valotietoja, joten Viron valot tulevat OpenStreetMapista.
+rekisterissä ei ole valotietoja, joten Viron valot tulevat OpenStreetMapista. Viron rekisteri kertoo
+merkin tyypin vain nimessä. Kun nimessä on pelkkä numero (esimerkiksi "Heltermaa 3"), luokka otetaan
+samassa paikassa olevasta OSM-merkistä. Jos sellaista ei ole, merkki piirretään ontona, koska numeron
+parillisuus ei Virossa kerro merkin puolta luotettavasti. Saksan aineistosta jätetään pois tuulivoimalat
+ja muiden maiden vesien merkit.
 
 OpenStreetMapin merimerkit haetaan alueittain kolmesta lähteestä siinä järjestyksessä, kuin ne vastaavat.
 Jos alue ei onnistu mistään, sille käytetään edellisen onnistuneen ajon tietoja, ja ajon yhteenveto
