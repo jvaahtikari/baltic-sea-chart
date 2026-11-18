@@ -14,6 +14,32 @@ MIN_FEATURES = {"land": 1000, "coastline": 1000, "depth_area": 100, "depth_conto
                 "light": 2000, "light_sector": 3000, "fairway": 1000, "navline": 5000, "nodata": 1}
 
 
+# Well-known major lights, one or two per country. If one is missing from the light layer, a source or a
+# filter has dropped it (this caught the Gulf of Riga lighthouses being taken for inland objects).
+KNOWN_LIGHTS = [("Bengtskär (FI)", 21.999, 59.722), ("Landsort (SE)", 17.866, 58.741), ("Keri (EE)", 25.02, 59.70),
+                ("Tahkuna (EE)", 22.587, 59.091), ("Daugavgrīva (LV)", 24.024, 57.060),
+                ("Klaipėda (LT)", 21.093, 55.729), ("Hel (PL)", 18.809, 54.601), ("Arkona (DE)", 13.432, 54.679),
+                ("Kiel lighthouse (DE)", 10.274, 54.500), ("Gedser (DK)", 11.964, 54.559)]
+
+
+def known_lights_missing():
+    """Names of KNOWN_LIGHTS with no major light within about 3 km."""
+    lp = C.MID / "light.geojsonl"
+    if not lp.exists():
+        return [n for n, _, _ in KNOWN_LIGHTS]
+    found = set()
+    with open(lp, encoding="utf-8") as f:
+        for line in f:
+            ft = json.loads(line)
+            if not ft["properties"].get("major"):
+                continue
+            x, y = ft["geometry"]["coordinates"][:2]
+            for n, lx, ly in KNOWN_LIGHTS:
+                if abs(x - lx) < 0.05 and abs(y - ly) < 0.027:
+                    found.add(n)
+    return [n for n, _, _ in KNOWN_LIGHTS if n not in found]
+
+
 def main(argv):
     out = Path(argv[0]) if argv else None
     problems = []
@@ -51,6 +77,9 @@ def main(argv):
         lg = json.loads(lp.read_text()) if lp.exists() else {}
         if lg.get("failed"):
             warnings.append("%s authority source failed, OSM seamarks used instead: %s" % (step, lg["failed"][:300]))
+    missing = known_lights_missing()
+    if missing:
+        warnings.append("known major lights missing from the light layer: " + ", ".join(missing))
     if not osm.get("regions") and (osm.get("missing") or osm.get("stale")):
         warnings.append("OSM seamarks: %s" % osm.get("source"))
     lines = ["# Build summary", "", "Result: **%s**" % ("OK" if not problems else "PROBLEMS"), ""]

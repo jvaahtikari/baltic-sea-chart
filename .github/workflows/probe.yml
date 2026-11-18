@@ -17,7 +17,7 @@ jobs:
         run: |
           sudo apt-get -o Acquire::Retries=3 update -qq
           sudo apt-get install -y -qq --no-install-recommends osmium-tool gdal-bin python3-gdal python3-numpy python3-shapely python3-pyproj
-      - name: Which Latvian lights does the build's land test drop, and why (real land polygons and OSM data)
+      - name: Land test at the Gulf of Riga after the MultiPolygon fix (real land polygons)
         timeout-minutes: 25
         run: |
           mkdir -p /tmp/p /tmp/pw/raw/land /tmp/pw/raw/osm

@@ -154,12 +154,18 @@ def area_km2(geom):
 
 # ---------------------------------------------------------------------------------------------
 # Land and coastline (OSM coastline-derived land polygons)
+def rings_of(g):
+    """All rings of a Polygon or MultiPolygon. shapely.get_rings returns nothing for a MultiPolygon, and
+    clipping the land polygons to the frame produces MultiPolygons (all of Latvia, for one)."""
+    return [r for part in shapely.get_parts(g) for r in shapely.get_rings(part)]
+
+
 def coast_lines(poly, frame_bounds):
     """Polygon rings minus the stretches that lie on the clipping frame (fast, coordinate based)."""
     x0, y0, x1, y1 = frame_bounds
     eps = 1e-9
     out = []
-    for ring in shapely.get_rings(poly):
+    for ring in rings_of(poly):
         xy = shapely.get_coordinates(ring)
         on_x = (np.abs(xy[:, 0] - x0) < eps) | (np.abs(xy[:, 0] - x1) < eps)
         on_y = (np.abs(xy[:, 1] - y0) < eps) | (np.abs(xy[:, 1] - y1) < eps)
@@ -217,7 +223,7 @@ class LandIndex:
         self.land_tree = shapely.STRtree(geoms)
         pieces = []
         for g in geoms:
-            for ring in shapely.get_rings(g):
+            for ring in rings_of(g):
                 xy = shapely.get_coordinates(ring)
                 for i in range(0, len(xy) - 1, 200):
                     seg = xy[i:i + 201]
