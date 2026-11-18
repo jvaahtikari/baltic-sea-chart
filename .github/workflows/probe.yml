@@ -13,11 +13,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { persist-credentials: false }
-      - name: Fetch the authority seamark sources with the pipeline's own code (raw data for local tuning)
+      - name: Install osmium
+        run: sudo apt-get -o Acquire::Retries=3 update -qq && sudo apt-get install -y -qq --no-install-recommends osmium-tool
+      - name: Fetch OSM seamarks of Estonia and Latvia with the pipeline's own code (raw data for local tuning)
+        timeout-minutes: 25
         run: |
-          mkdir -p /tmp/p
-          BSC_WORK=/tmp/pw python3 -m pipeline.fetch estonia germany 2>&1 | tail -20 > /tmp/p/probe.md || true
-          mkdir -p /tmp/p/raw && cp -r /tmp/pw/raw/estonia /tmp/pw/raw/germany /tmp/p/raw/ 2>/dev/null; gzip -r /tmp/p/raw || true
+          mkdir -p /tmp/p/raw/osm /tmp/pw
+          BSC_WORK=/tmp/pw python3 - <<'PY' 2>&1 | tail -30 > /tmp/p/probe.md || true
+          import pathlib, shutil
+          from pipeline import config as C, fetch as F
+          d = pathlib.Path("/tmp/p/raw/osm")
+          for name, osmfr, geofabrik, box in C.OSM_REGIONS:
+              if name not in ("estonia", "latvia"):
+                  continue
+              for how in ("extract", "overpass"):
+                  try:
+                      if how == "extract":
+                          F.osm_region_from_extract(name, C.GEOFABRIK + geofabrik + "-latest.osm.pbf", d)
+                      else:
+                          F.osm_region_from_overpass(name, box, d)
+                      print(name, how, "ok"); break
+                  except Exception as e:
+                      print(name, how, "failed", str(e)[:200])
+          PY
+          gzip -r /tmp/p/raw || true
+
       - name: Publish to branch probe-log
         if: always()
         env: { GH_TOKEN: "${{ github.token }}" }
