@@ -55,7 +55,7 @@ def main(argv):
             sizes[str(p.relative_to(C.DIST))] = round(mb, 2)
             if mb > C.MAX_FILE_MB:
                 problems.append("%s is %.1f MB (limit %d MB)" % (p.name, mb, C.MAX_FILE_MB))
-    for need in ("land.pmtiles", "chart.pmtiles", "depth.pmtiles", "depth-fi.pmtiles", "style.json", "style-dark.json", "sprite.png",
+    for need in ("land.pmtiles", "coastline.pmtiles", "chart.pmtiles", "depth.pmtiles", "depth-fi.pmtiles", "style.json", "style-dark.json", "sprite.png",
                  "index.html", "chart-style.js", "sources.json"):
         if need not in sizes:
             problems.append("missing " + need)

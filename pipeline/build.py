@@ -528,13 +528,16 @@ def light_label(chr_, colours, period=None, group=None):
     return " ".join(p for p in parts if p) or None
 
 
-# (minzoom, maxzoom, radius in metres): about 15-30 mm on screen at 60 N within each band
-SECTOR_BANDS = [(11, 12, 2000.0), (13, 14, 600.0), (15, None, 200.0)]
+# (minzoom, maxzoom, radius in metres): about 12-25 mm on screen at 60 N within each band
+SECTOR_BANDS = [(11, 12, 1500.0), (13, 14, 450.0), (15, None, 150.0)]
 
 
 def add_sectors(w_sect, lon, lat, secs, src):
-    """Writes the arcs and limit legs of a light's sectors in every zoom band."""
+    """Writes the arcs and limit legs of a light's sectors in every zoom band. An all-round light
+    (0-360) gets no arc: the charts show it with the flare alone, and a ring only adds clutter."""
     for s0, s1, col in secs:
+        if ((s1 - s0) % 360.0) < 0.5:
+            continue
         for zmin, zmax, r in SECTOR_BANDS:
             arc, legs = sector_geoms(lon, lat, s0, s1, r)
             w_sect.add(arc, {"colour": col, "part": "arc", "src": src}, minzoom=zmin, maxzoom=zmax)
@@ -557,7 +560,7 @@ def sector_geoms(lon, lat, start, end, radius_m=250.0):
         return (lon + r * math.sin(b) * kx, lat + r * math.cos(b) * ky)
 
     arc = LineString([pt(a0 + span * i / n, radius_m) for i in range(n + 1)])
-    legs = [] if span >= 359.9 else [LineString([(lon, lat), pt(a0, radius_m * 1.6)]),
+    legs = [] if span >= 359.9 else [LineString([(lon, lat), pt(a0, radius_m * 1.3)]),
                                      LineString([(lon, lat), pt(a1, radius_m * 1.6)])]
     return arc, legs
 
@@ -1086,8 +1089,10 @@ def step_tiles():
                 return
         say("  WARNING: %s is still over %d MB" % (fname, C.MAX_FILE_MB))
 
-    tiles("land.pmtiles", "Baltic Sea chart: land", 13, ["land", "coastline"],
+    # Land and coastline in separate archives: together they passed 90 MB, and GitHub stops at 100 MB
+    tiles("land.pmtiles", "Baltic Sea chart: land", 13, ["land"],
           ["--detect-shared-borders", "--no-tile-size-limit"])
+    tiles("coastline.pmtiles", "Baltic Sea chart: coastline", 13, ["coastline"], ["--no-tile-size-limit"])
     tiles("chart.pmtiles", "Baltic Sea chart: seamarks and routes", 15,
           ["nodata", "seamark", "light", "light_sector", "hazard", "danger_area", "sounding", "fairway", "navline",
            "leading_line", "tss"], ["--no-tile-size-limit", "--no-feature-limit"], optional=("sounding",))

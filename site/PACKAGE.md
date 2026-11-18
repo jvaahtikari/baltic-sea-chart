@@ -12,7 +12,8 @@ folder can be committed to a GitHub repository as it is.
 
 | File | Content |
 | --- | --- |
-| `land.pmtiles` | Vector tiles: land and coastline |
+| `land.pmtiles` | Vector tiles: land polygons |
+| `coastline.pmtiles` | Vector tiles: coastline |
 | `chart.pmtiles` | Vector tiles: seamarks, lights, light sectors, hazards, fairways, navigation lines, traffic separation, excluded waters |
 | `depth.pmtiles` | Vector tiles: depth areas and depth contours outside Finnish waters (EMODnet) and everywhere up to zoom 8 |
 | `depth-fi.pmtiles` | Vector tiles: depth areas and depth contours in Finnish waters from zoom 9 (Traficom) |
@@ -67,7 +68,7 @@ turns them into MBTiles if your tool needs that.
 
 ## Layers
 
-`land.pmtiles`
+`land.pmtiles` and `coastline.pmtiles`
 
 | Layer | Geometry | Fields |
 | --- | --- | --- |
@@ -81,7 +82,7 @@ turns them into MBTiles if your tool needs that.
 | `nodata` | polygon | `reason`, `territory` (waters left out of the package) |
 | `seamark` | point | `kind` (spar, buoy, beacon, cairn, leading_mark, light, lighthouse, daymark, racon, light_float, other), `cat` (port, starboard, north, south, east, west, isolated_danger, safe_water, special, none; IALA region A), `name`, `ref`, `lit`, `topmark`, `src` |
 | `light` | point | `label` (e.g. `Fl(2)WRG 6s`), `colour` (W, R, G, Y, Bu letters), `height` (m), `range` (nm), `major`, `ref`, `src` |
-| `light_sector` | line | `colour`, `part` (arc, limit), `src`; each sector is stored three times with a radius per zoom band (2000 m for zooms 11–12, 600 m for 13–14, 200 m from 15), so that the arcs stay about the same size on screen |
+| `light_sector` | line | `colour`, `part` (arc, limit), `src`; each sector is stored three times with a radius per zoom band (1500 m for zooms 11–12, 450 m for 13–14, 150 m from 15), so that the arcs stay about the same size on screen; all-round lights have no arc |
 | `hazard` | point | `kind` (rock, wreck, obstruction), `water_level` (dry, awash, submerged; OSM values as tagged), `name`, `src` |
 | `danger_area` | polygon | `kind` (rocks, shoal), `src` (Finland, MML topographic database) |
 | `sounding` | point | `d` (depth, m), `src` (Finland, Traficom) |

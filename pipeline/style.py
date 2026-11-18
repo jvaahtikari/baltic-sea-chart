@@ -65,6 +65,7 @@ def style(attribution_chart, attribution_depth, theme="light"):
         "zoom": 5,
         "sources": {
             "land": {"type": "vector", "url": "pmtiles://land.pmtiles", "attribution": "© OpenStreetMap contributors"},
+            "coastline": {"type": "vector", "url": "pmtiles://coastline.pmtiles", "attribution": "© OpenStreetMap contributors"},
             "chart": {"type": "vector", "url": "pmtiles://chart.pmtiles", "attribution": attribution_chart},
             "depth": {"type": "vector", "url": "pmtiles://depth.pmtiles", "attribution": attribution_depth},
             "depth-fi": {"type": "vector", "url": "pmtiles://depth-fi.pmtiles", "attribution": attribution_depth},
@@ -85,7 +86,7 @@ def style(attribution_chart, attribution_depth, theme="light"):
              "paint": {"line-color": P["tss"], "line-width": 1, "line-dasharray": [4, 2]}},
             {"id": "land", "type": "fill", "source": "land", "source-layer": "land",
              "paint": {"fill-color": P["land"]}},
-            {"id": "coastline", "type": "line", "source": "land", "source-layer": "coastline",
+            {"id": "coastline", "type": "line", "source": "coastline", "source-layer": "coastline",
              "paint": {"line-color": P["coast"], "line-width": ["interpolate", ["linear"], ["zoom"], 6, 0.3, 12, 0.9]}},
             # Traficom depth areas above the land polygons: in Finnish waters the chart database defines the
             # water's edge, as on the paper chart; OSM land only fills in what the chart leaves out
