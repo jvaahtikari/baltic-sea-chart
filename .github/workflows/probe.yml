@@ -30,7 +30,6 @@ jobs:
           subprocess.run(["ogr2ogr", "-f", "GeoJSONSeq", "-overwrite", str(d / "land.geojsonl"),
                           "/vsizip/%s/land-polygons-complete-4326/land_polygons.shp" % z,
                           "-clipsrc", "20.5", "56.0", "25.0", "58.2", "-explodecollections", "-lco", "RS=NO"], check=True)
-          F.osm_region_from_extract("latvia", C.GEOFABRIK + "europe/latvia-latest.osm.pbf", C.RAW / "osm")
           from pipeline import build as B
           from shapely.geometry import shape, Point
           import shapely
