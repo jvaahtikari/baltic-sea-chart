@@ -281,6 +281,17 @@ def step_depth():
     w_fi_area.close()
     w_fi_cnt.close()
     LOG["traficom_depth_areas_used"] = n_fi
+    # Spot soundings (Sounding_P): the chart's depth figures. Shown from zoom 12; MapLibre thins them by collision.
+    w_snd = Writer("sounding")
+    sp = tdir / "Sounding_P.geojsonl"
+    if sp.exists():
+        for ft in read_seq(sp):
+            pt = point_of(ft)
+            d = num(ft["properties"].get("DEPTH"))
+            if pt is None or d is None or d < 0 or not fi_zone.contains(pt):
+                continue
+            w_snd.add(pt, {"d": round(d, 1), "src": "traficom"}, minzoom=12 if d < 20 else 13)
+    w_snd.close()
     say("  Traficom done (%.0f s)" % (time.time() - t0))
 
     # 2. EMODnet grid: depth in metres, masked to the area of interest minus Finnish coverage.
@@ -325,7 +336,21 @@ def step_depth():
                       "fi_masked_cells": int(fi_cov.sum()), "aoi_cells": int(in_aoi.sum())}
     depth = sign * arr
     del arr
-    depth[~sea | (depth < 0)] = np.nan
+    depth[depth < 0] = np.nan
+    # The grid has no data on land and in unsurveyed shallows, and its land mask is a 1/16' staircase that
+    # does not follow the OSM coastline. Filling no-data cells from their neighbours (up to ~10 cells) lets
+    # the depth areas continue under the land polygons, which then give the shoreline its real shape.
+    mem = gdal.GetDriverByName("MEM").Create("", W, H, 1, gdal.GDT_Float32)
+    mem.SetGeoTransform(gt)
+    mb_ = mem.GetRasterBand(1)
+    mb_.SetNoDataValue(-9999)
+    mb_.WriteArray(np.where(np.isfinite(depth), depth, -9999).astype(np.float32))
+    del depth
+    gdal.FillNodata(targetBand=mb_, maskBand=None, maxSearchDist=10, smoothingIterations=1)
+    depth = mb_.ReadAsArray().astype(np.float32)
+    mem = mb_ = None
+    depth[(depth <= -9998) | ~in_aoi] = np.nan
+    sea = np.isfinite(depth)
 
     def write_tif(path, a):
         drv = gdal.GetDriverByName("GTiff")
@@ -503,6 +528,20 @@ def light_label(chr_, colours, period=None, group=None):
     return " ".join(p for p in parts if p) or None
 
 
+# (minzoom, maxzoom, radius in metres): about 15-30 mm on screen at 60 N within each band
+SECTOR_BANDS = [(11, 12, 2000.0), (13, 14, 600.0), (15, None, 200.0)]
+
+
+def add_sectors(w_sect, lon, lat, secs, src):
+    """Writes the arcs and limit legs of a light's sectors in every zoom band."""
+    for s0, s1, col in secs:
+        for zmin, zmax, r in SECTOR_BANDS:
+            arc, legs = sector_geoms(lon, lat, s0, s1, r)
+            w_sect.add(arc, {"colour": col, "part": "arc", "src": src}, minzoom=zmin, maxzoom=zmax)
+            for leg in legs:
+                w_sect.add(leg, {"colour": col, "part": "limit", "src": src}, minzoom=max(zmin, 12), maxzoom=zmax)
+
+
 def sector_geoms(lon, lat, start, end, radius_m=250.0):
     """Arc and two limit legs for a light sector. Angles are bearings from seaward towards the
     light (as in the lists of lights), so the arc lies on the opposite side of the light."""
@@ -650,11 +689,7 @@ def step_marks():
                                       "height": num(p.get("korkeusvedesta")), "range": num(p.get("maantietkanto")),
                                       "major": major, "ref": p.get("turvalaitenumero"), "src": "fi"},
                     minzoom=8 if major else 10)
-        for s0, s1, col in secs:
-            arc, legs = sector_geoms(lon, lat, s0, s1)
-            w_sect.add(arc, {"colour": col, "part": "arc", "src": "fi"}, minzoom=12)
-            for leg in legs:
-                w_sect.add(leg, {"colour": col, "part": "limit", "src": "fi"}, minzoom=13)
+        add_sectors(w_sect, lon, lat, secs, "fi")
 
     # --- Estonia: Transpordiamet aids to navigation register (names carry the type; no light data)
     ee_zone = A.get("ee_zone")
@@ -737,10 +772,7 @@ def step_marks():
                                  "range": rng, "major": major, "src": "de"}, minzoom=8 if major else 10)
                 s1, s2 = num(p.get("sectr1")), num(p.get("sectr2"))
                 if s1 is not None and s2 is not None:
-                    arc, legs = sector_geoms(pt.x, pt.y, s1, s2)
-                    w_sect.add(arc, {"colour": cols[0] if cols else "W", "part": "arc", "src": "de"}, minzoom=12)
-                    for leg in legs:
-                        w_sect.add(leg, {"colour": cols[0] if cols else "W", "part": "limit", "src": "de"}, minzoom=13)
+                    add_sectors(w_sect, pt.x, pt.y, [(s1, s2, cols[0] if cols else "W")], "de")
                 k = xy5(pt)
                 lit_at[k] = max(lit_at.get(k, 0), rng or 0.001)
                 n_de_l += 1
@@ -761,7 +793,9 @@ def step_marks():
     LOG["germany_marks"], LOG["germany_lights"] = n_de, n_de_l
     use_de = n_de > 0 and de_zone is not None and not de_zone.is_empty
 
-    # --- OpenStreetMap seamarks (outside Finnish waters for marks and lights, everywhere for hazards)
+    # --- OpenStreetMap seamarks (outside Finnish waters for marks and lights, everywhere for hazards
+    #     except Finnish rocks when the MML source is present)
+    mml_rocks = (RAW / "mml" / "vesikivi.geojsonl").exists()
     for ft in read_seq(RAW / "osm" / "seamark.geojsonl"):
         g = shape(ft["geometry"]) if ft.get("geometry") else None
         if g is None or g.is_empty:
@@ -773,6 +807,8 @@ def step_marks():
         name = tags.get("seamark:name") or tags.get("name")
         if t in HAZARDS:
             if not ok(lon, lat):
+                continue
+            if t == "rock" and mml_rocks and fi_zone.contains(pt):
                 continue
             wl = tags.get("seamark:%s:water_level" % t)
             w_haz.add(g if g.geom_type == "Point" else pt,
@@ -798,12 +834,34 @@ def step_marks():
             w_light.add(pt, {"label": label, "colour": "".join(cols) or "W",
                              "height": num(tags.get("seamark:light:height")), "range": rng,
                              "major": major, "src": "osm"}, minzoom=8 if major else 10)
-            for s0, s1, col in secs:
-                arc, legs = sector_geoms(lon, lat, s0, s1)
-                w_sect.add(arc, {"colour": col, "part": "arc", "src": "osm"}, minzoom=12)
-                for leg in legs:
-                    w_sect.add(leg, {"colour": col, "part": "limit", "src": "osm"}, minzoom=13)
-    for w in (w_mark, w_light, w_sect, w_haz):
+            add_sectors(w_sect, lon, lat, secs, "osm")
+
+    # --- Finland: rocks, rocky areas and shoals of the MML topographic database (optional source)
+    w_dng = Writer("danger_area")
+    md = RAW / "mml"
+    n_mml = 0
+    if (md / "vesikivi.geojsonl").exists():
+        for ft in read_seq(md / "vesikivi.geojsonl"):
+            pt = point_of(ft)
+            if pt is None or not fi_zone.contains(pt):
+                continue
+            cls = str(ft["properties"].get("kohdeluokka") or "")
+            wl = {"38511": "submerged", "38512": "awash", "38513": "dry"}.get(cls, "submerged")
+            w_haz.add(pt, {"kind": "rock", "water_level": wl, "src": "mml"}, minzoom=12 if wl != "submerged" else 13)
+            n_mml += 1
+    for col in ("vesikivikko", "matalikko"):
+        if not (md / (col + ".geojsonl")).exists():
+            continue
+        for ft in read_seq(md / (col + ".geojsonl")):
+            g = shape(ft["geometry"]) if ft.get("geometry") else None
+            if g is None or g.is_empty or g.geom_type not in ("Polygon", "MultiPolygon"):
+                continue
+            if not fi_zone.contains(g.representative_point()):
+                continue
+            w_dng.add(g, {"kind": "rocks" if col == "vesikivikko" else "shoal", "src": "mml"}, minzoom=12)
+            n_mml += 1
+    LOG["mml_features"] = n_mml
+    for w in (w_mark, w_light, w_sect, w_haz, w_dng):
         w.close()
     LOG["marks_dropped"] = dropped
 
@@ -1030,9 +1088,9 @@ def step_tiles():
 
     tiles("land.pmtiles", "Baltic Sea chart: land", 13, ["land", "coastline"],
           ["--detect-shared-borders", "--no-tile-size-limit"])
-    tiles("chart.pmtiles", "Baltic Sea chart: seamarks and routes", 14,
-          ["nodata", "seamark", "light", "light_sector", "hazard", "fairway", "navline", "leading_line", "tss"],
-          ["--no-tile-size-limit", "--no-feature-limit"])
+    tiles("chart.pmtiles", "Baltic Sea chart: seamarks and routes", 15,
+          ["nodata", "seamark", "light", "light_sector", "hazard", "danger_area", "sounding", "fairway", "navline",
+           "leading_line", "tss"], ["--no-tile-size-limit", "--no-feature-limit"], optional=("sounding",))
     tiles("depth.pmtiles", "Baltic Sea chart: depth (EMODnet)", 12, ["depth_area", "depth_contour"],
           ["--detect-shared-borders", "--no-tile-size-limit"], simp=4)
     tiles("depth-fi.pmtiles", "Baltic Sea chart: depth in Finnish waters (Traficom)", 12,

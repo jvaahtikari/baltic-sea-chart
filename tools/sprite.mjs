@@ -66,9 +66,11 @@ const lighthouse = () => svg(22, 22, `<circle cx="11" cy="11" r="9" fill="none" 
 const racon = () => svg(18, 18, `<circle cx="9" cy="9" r="7" fill="none" stroke="${PURPLE}" stroke-width="1.6"/><circle cx="9" cy="9" r="1.6" fill="${INK}"/>`);
 const lightFloat = () => svg(24, 24, `<path d="M3 14H21L18 18H6Z" fill="${INK}"/><path d="M12 14V6" stroke="${INK}" stroke-width="1.4"/>` + base(12, 12));
 const generic = () => svg(16, 16, `<circle cx="8" cy="8" r="2.6" fill="${PAPER}" stroke="${INK}" stroke-width="1.3"/>`);
-// Hazards: rock (submerged: cross; awash: cross with dots), wreck, obstruction
-const rock = () => svg(16, 16, `<path d="M3 8H13M8 3V13" stroke="${INK}" stroke-width="1.4"/>`);
-const rockAwash = () => svg(16, 16, `<path d="M3 8H13M8 3V13" stroke="${INK}" stroke-width="1.4"/><circle cx="4.6" cy="4.6" r="1" fill="${INK}"/><circle cx="11.4" cy="4.6" r="1" fill="${INK}"/><circle cx="4.6" cy="11.4" r="1" fill="${INK}"/><circle cx="11.4" cy="11.4" r="1" fill="${INK}"/>`);
+// Rocks as on the Finnish charts (Traficom merkkienselitys): above water ⊥, awash +, submerged ⊤.
+// The position is at the image centre: the base line of ⊥ and the cross bar of ⊤ pass through it.
+const rockDry = () => svg(16, 16, `<path d="M3 8H13M8 8V1.5" stroke="${INK}" stroke-width="1.5"/>`);
+const rockAwash = () => svg(16, 16, `<path d="M3 8H13M8 3V13" stroke="${INK}" stroke-width="1.5"/>`);
+const rockUnder = () => svg(16, 16, `<path d="M3 8H13M8 8V14.5" stroke="${INK}" stroke-width="1.5"/>`);
 const wreck = () => svg(24, 16, `<path d="M2 8H22M8 4V12M12 3V13M16 4V12" stroke="${INK}" stroke-width="1.3"/>`);
 const obstruction = () => svg(18, 18, `<circle cx="9" cy="9" r="6.5" fill="none" stroke="${INK}" stroke-width="1.2" stroke-dasharray="2 1.6"/><text x="9" y="11.6" font-size="7" font-family="sans-serif" text-anchor="middle" fill="${INK}">Obs</text>`);
 // Light flare (teardrop) pointing from the light towards 135 degrees, light at the image centre.
@@ -81,7 +83,8 @@ for (const t of ['light', 'dark']) {
   for (const c of ['port', 'starboard', 'north', 'south', 'east', 'west', 'isolated_danger', 'safe_water', 'special', 'none']) icons['mark-' + c + sfx] = mark(c);
   const more = {
     cairn: cairn(), daymark: daymark(), leading_mark: leading(), light: light(), lighthouse: lighthouse(), racon: racon(),
-    light_float: lightFloat(), generic: generic(), rock: rock(), 'rock-awash': rockAwash(), wreck: wreck(), obstruction: obstruction(),
+    light_float: lightFloat(), generic: generic(), 'rock-dry': rockDry(), 'rock-awash': rockAwash(), 'rock-under': rockUnder(),
+    wreck: wreck(), obstruction: obstruction(),
   };
   for (const [k, v] of Object.entries(more)) icons[k + sfx] = v;
   for (const [k, v] of Object.entries(LIGHT)) icons['flare-' + k + sfx] = flare(v);

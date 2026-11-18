@@ -59,7 +59,7 @@ lightMapSwitch.onchange = e => setBalticTheme(map, e.target.checked ? 'light' : 
 Layer ids of the style (for `only`, `skip` and visibility toggles): `depth-area`, `depth-area-fi`,
 `depth-area-edge`, `depth-contour`, `depth-contour-fi`, `depth-label`, `depth-label-fi`, `nodata`, `tss-area`, `tss-line`, `fairway`, `fairway-edge`, `land`,
 `coastline`, `navline`, `navline-track`, `navline-depth`, `leading-line`, `light-sector-limit`,
-`light-sector-arc`, `hazard`, `light-flare`, `seamark`, `light-label`, `seamark-name`.
+`light-sector-arc`, `sounding`, `danger-area`, `danger-area-edge`, `hazard`, `light-flare`, `seamark`, `light-label`, `seamark-name`.
 
 The tiles are ordinary Mapbox Vector Tiles inside PMTiles archives, so they also work in
 OpenLayers, Leaflet (protomaps-leaflet), QGIS and GDAL. `pmtiles extract` or `pmtiles convert`
@@ -81,8 +81,10 @@ turns them into MBTiles if your tool needs that.
 | `nodata` | polygon | `reason`, `territory` (waters left out of the package) |
 | `seamark` | point | `kind` (spar, buoy, beacon, cairn, leading_mark, light, lighthouse, daymark, racon, light_float, other), `cat` (port, starboard, north, south, east, west, isolated_danger, safe_water, special, none; IALA region A), `name`, `ref`, `lit`, `topmark`, `src` |
 | `light` | point | `label` (e.g. `Fl(2)WRG 6s`), `colour` (W, R, G, Y, Bu letters), `height` (m), `range` (nm), `major`, `ref`, `src` |
-| `light_sector` | line | `colour`, `part` (arc, limit), `src`; arcs are drawn at a fixed 250 m radius |
-| `hazard` | point | `kind` (rock, wreck, obstruction), `water_level`, `name`, `src` |
+| `light_sector` | line | `colour`, `part` (arc, limit), `src`; each sector is stored three times with a radius per zoom band (2000 m for zooms 11–12, 600 m for 13–14, 200 m from 15), so that the arcs stay about the same size on screen |
+| `hazard` | point | `kind` (rock, wreck, obstruction), `water_level` (dry, awash, submerged; OSM values as tagged), `name`, `src` |
+| `danger_area` | polygon | `kind` (rocks, shoal), `src` (Finland, MML topographic database) |
+| `sounding` | point | `d` (depth, m), `src` (Finland, Traficom) |
 | `fairway` | polygon | `depth` (design draught, m), `kind`, `name`, `src` |
 | `navline` | line | `depth`, `bearing` (true), `kind`, `name`, `src` |
 | `leading_line` | line | `bearing`, `src` (Finland only) |
@@ -100,7 +102,7 @@ Features may also carry `minzoom`/`maxzoom`: the zoom range in which the feature
 Traficom depths from zoom 9.
 
 `src` tells where a feature comes from: `fi` = Väylävirasto, `ee` = Transpordiamet (Estonia), `de` = BSH (Germany), `traficom` = Traficom, `osm` = OpenStreetMap,
-`emodnet` = EMODnet Bathymetry.
+`emodnet` = EMODnet Bathymetry, `mml` = Maanmittauslaitos.
 
 A seamark with `cat` = `none` is drawn hollow: the source does not say which kind of mark it is. This is
 mostly the case for numbered channel marks in the Estonian register, whose names carry only a number.
@@ -117,8 +119,10 @@ Show the attribution texts of `style.json` (MapLibre's attribution control does 
 - **Transpordiamet / Maa- ja Ruumiamet** (Estonian seamarks, fairway areas and sections): Estonian open
   data licence (CC BY 4.0 equivalent).
 - **BSH** (German seamarks, lights and sectors): GeoNutzV, source note "© BSH"; not for navigation.
-- **Traficom** (Finnish depth areas and contours): not for navigation, non-commercial use only,
+- **Traficom** (Finnish depth areas, contours and soundings): not for navigation, non-commercial use only,
   attribution with the month of transfer.
+- **Maanmittauslaitos** (Finnish rocks, rocky areas and shoals from the topographic database): CC BY 4.0.
+  Present only when the build had an MML API key.
 - **EMODnet Bathymetry** (depths outside Finland): open access with attribution.
 - **Marine Regions** (sea areas, maritime boundaries): CC BY 4.0.
 - MapLibre GL JS and PMTiles: BSD-3-Clause. Noto Sans fonts: SIL Open Font License.

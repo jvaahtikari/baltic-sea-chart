@@ -113,10 +113,12 @@ jobs:
 
       - name: Fetch sources (in parallel)
         shell: bash
+        env:
+          MML_API_KEY: ${{ secrets.MML_API_KEY }}   # optional: Finnish rocks and shoals from Maanmittauslaitos
         run: |
           mkdir -p work/logs
           pids=()
-          for group in "regions vayla estonia germany" "traficom" "emodnet" "land"; do
+          for group in "regions vayla estonia germany" "traficom mml" "emodnet" "land"; do
             name="${group// /_}"
             /usr/bin/python3 -m pipeline.fetch $group > "work/logs/fetch_$name.log" 2>&1 &
             pids+=("$!:$name")

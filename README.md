@@ -27,18 +27,20 @@ Paketin `README.md` (englanniksi) kuvaa kerrokset, kentät, tyylien kerrostunnuk
 
 Pysyäksesi ajan tasalla voit joko hakea zipin uudelleen esimerkiksi viikoittaisella omalla työnkululla
 tai forkata koko repon. Forkissa Actions ajaa saman tietoputken itsenäisesti (Actions-välilehdellä
-*Build Baltic Sea chart* → *Run workflow*). Salaisuuksia ei tarvita.
+*Build Baltic Sea chart* → *Run workflow*). Salaisuuksia ei tarvita; jos repon salaisuuksissa on Maanmittauslaitoksen
+maksuton API-avain `MML_API_KEY`, Suomen vesille tulevat lisäksi maastotietokannan kivet, vesikivikot ja matalikot.
 
 ## Lähteet
 
 | Aineisto | Lähde ja rajapinta | Lisenssi |
 | --- | --- | --- |
-| Syvyysalueet ja -käyrät, Suomen vedet | Traficom, merikarttatietokanta (INSPIRE WFS, `DepthArea_A`, `DepthContour_L`) | ei navigointikäyttöön, ei-kaupallinen, lähdemerkintä siirtokuukausineen |
+| Syvyysalueet, -käyrät ja syvyysluvut, Suomen vedet | Traficom, merikarttatietokanta (INSPIRE WFS, `DepthArea_A`, `DepthContour_L`, `Sounding_P`) | ei navigointikäyttöön, ei-kaupallinen, lähdemerkintä siirtokuukausineen |
 | Syvyysalueet ja -käyrät, muut vedet | EMODnet Bathymetry DTM (WCS, keskisyvyys noin 115 m ruuduin) | avoin, lähdemerkintä |
 | Turvalaitteet, loistot, valosektorit, väyläalueet, navigointi- ja taululinjat, Suomi | Väylävirasto (WFS) | CC BY 4.0 |
 | Merimerkit, väyläalueet ja väyläosuudet, Viro | Transpordiametin navigointimerkkirekisteri (INSPIRE WFS, Maa- ja Ruumiamet) | Viron avoimen datan lisenssi (CC BY 4.0 -vastine) |
 | Merimerkit ja valot sektoreineen, Saksa | BSH, Navigation marks according to S-57 (WFS) | GeoNutzV, lähdemerkintä © BSH |
 | Merimerkit, valot, karit, hylyt, liikenteenjakoalueet, muut maat | OpenStreetMap / OpenSeaMap-merkinnät alueittain: openstreetmap.fr- tai Geofabrik-poiminta tai Overpass API | ODbL 1.0 |
+| Kivet, vesikivikot ja matalikot, Suomi (valinnainen, vaatii `MML_API_KEY`) | Maanmittauslaitos, maastotietokanta (OGC API Features) | CC BY 4.0 |
 | Maa-alueet ja rantaviiva | OpenStreetMap-rantaviivasta tehdyt maapolygonit (osmdata.openstreetmap.de) | ODbL 1.0 |
 | Itämeren rajaus ja Venäjän vedet | Marine Regions: IHO-merialueet ja merivyöhykkeet (WFS) | CC BY 4.0 |
 

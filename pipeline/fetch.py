@@ -1,6 +1,6 @@
 """Download every source from its live service. Run: python3 -m pipeline.fetch [step ...]
 
-Steps: regions, emodnet, vayla, traficom, osm, land. Without arguments all steps run.
+Steps: regions, emodnet, vayla, traficom, osm, land, estonia, germany, mml. Without arguments all steps run.
 Each step writes into work/raw/<step>/ and records what it fetched in work/raw/<step>/log.json.
 """
 import concurrent.futures as cf
@@ -170,7 +170,7 @@ def step_vayla():
     log_step("vayla", source=C.VAYLA_WFS, layers=got, licence="CC BY 4.0 (Väylävirasto)")
 
 
-TRAFICOM_LAYERS = ["DepthArea_A", "DepthContour_L"]
+TRAFICOM_LAYERS = ["DepthArea_A", "DepthContour_L", "Sounding_P"]
 
 
 def step_traficom():
@@ -182,6 +182,53 @@ def step_traficom():
                             sortBy="IDENTIFIER")
     log_step("traficom", source=C.TRAFICOM_WFS, layers=got,
              licence="Traficom merikarttatietokanta: not for navigation, non-commercial use, attribution with transfer date")
+
+
+def step_mml():
+    """Rocks (vesikivi), rocky areas (vesikivikko) and shoals (matalikko) of the Finnish topographic database.
+    The paper charts show these with their own symbols; Traficom's open WFS does not carry them. Skipped
+    without MML_API_KEY (the fork of a friend works without the key, with OSM rocks only)."""
+    d = RAW / "mml"
+    shutil.rmtree(d, ignore_errors=True)
+    d.mkdir(parents=True, exist_ok=True)
+    if not C.MML_API_KEY:
+        log_step("mml", missing="MML_API_KEY not set", fallback="Finnish rocks from OpenStreetMap only")
+        return
+    x0, y0, x1, y1 = C.MML_BBOX
+    cw, ch = C.MML_CELL
+    cells = [(x, y, min(x + cw, x1), min(y + ch, y1)) for x in frange(x0, x1, cw) for y in frange(y0, y1, ch)]
+    got = {}
+    for col in C.MML_COLLECTIONS:
+        dest = d / (col + ".geojsonl")
+
+        def one(cell, col=col):
+            url = "%s/collections/%s/items?%s" % (C.MML_API, col, urllib.parse.urlencode(
+                {"f": "json", "limit": 10000, "bbox": ",".join("%.4f" % v for v in cell), "api-key": C.MML_API_KEY}))
+            feats = []
+            while url:
+                j = json.loads(http_get(url, tries=4, timeout=300))
+                feats += j.get("features", [])
+                url = next((l.get("href") for l in j.get("links", []) if l.get("rel") == "next"), None)
+                if url and "api-key" not in url:
+                    url += ("&" if "?" in url else "?") + "api-key=" + urllib.parse.quote(C.MML_API_KEY)
+            return feats
+
+        n = 0
+        with open(dest, "w", encoding="utf-8") as f, cf.ThreadPoolExecutor(4) as ex:
+            for feats in ex.map(one, cells):
+                for ft in feats:
+                    f.write(json.dumps(ft, ensure_ascii=False, separators=(",", ":")) + "\n")
+                n += len(feats)
+        got[col] = n
+    log_step("mml", source=C.MML_API, layers=got, licence="CC BY 4.0 (Maanmittauslaitos, maastotietokanta)")
+
+
+def frange(a, b, step):
+    out = []
+    while a < b - 1e-9:
+        out.append(round(a, 6))
+        a += step
+    return out
 
 
 def run(cmd, **kw):
@@ -426,11 +473,11 @@ def step_land():
 
 STEPS = {"regions": step_regions, "emodnet": step_emodnet, "vayla": step_vayla,
          "traficom": step_traficom, "osm": step_osm, "osm_fallback": step_osm_fallback, "estonia": step_estonia,
-         "germany": step_germany, "land": step_land}
+         "germany": step_germany, "land": step_land, "mml": step_mml}
 
 
 # Optional authority sources: if one fails, the build falls back to OSM in that area and the run goes on.
-OPTIONAL = {"estonia": "estonia", "germany": "germany"}
+OPTIONAL = {"estonia": "estonia", "germany": "germany", "mml": "mml"}
 
 
 def main(argv):
@@ -443,7 +490,7 @@ def main(argv):
             if n not in OPTIONAL:
                 raise
             shutil.rmtree(RAW / OPTIONAL[n], ignore_errors=True)
-            log_step(n, failed=str(e)[:500], fallback="OpenStreetMap seamarks are used in this area")
+            log_step(n, failed=str(e)[:500], fallback="OpenStreetMap data is used instead")
             print("[%s] FAILED, falling back to OSM: %s" % (n, str(e)[:300]), flush=True)
         print("[%s] done in %.0f s" % (n, time.time() - t), flush=True)
 

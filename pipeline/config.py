@@ -40,6 +40,15 @@ DE_TERRITORY = "Germany"
 VAYLA_WFS = "https://avoinapi.vaylapilvi.fi/vaylatiedot/ows"
 TRAFICOM_WFS = "https://julkinen.traficom.fi/inspirepalvelu/rajoitettu/wfs"
 
+# Maanmittauslaitos topographic database (OGC API Features, CC BY 4.0): rocks, rocky areas and shoals in
+# Finnish waters. Needs a free API key (https://www.maanmittauslaitos.fi/rajapinnat/api-avaimen-ohje) in the
+# environment variable MML_API_KEY; without it the step is skipped and Finnish rocks come from OSM only.
+MML_API = "https://avoin-paikkatieto.maanmittauslaitos.fi/maastotiedot/features/v1"
+MML_API_KEY = os.environ.get("MML_API_KEY", "").strip()
+MML_COLLECTIONS = ["vesikivi", "vesikivikko", "matalikko"]
+MML_BBOX = (19.0, 59.6, 30.6, 66.2)      # Finnish sea areas; lakes are dropped in the build by the maritime zone
+MML_CELL = (1.0, 0.5)                     # request window (degrees)
+
 # OpenStreetMap seamarks are fetched per region, each from the first source that answers:
 # the openstreetmap.fr extract, the Geofabrik extract, or the Overpass API for the region's box.
 # A region that fails everywhere keeps its seamarks from the last successful run (workflow cache).

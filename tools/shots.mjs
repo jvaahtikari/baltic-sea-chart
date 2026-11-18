@@ -34,7 +34,7 @@ for (const [name, lon, lat, z, base] of jobs) {
   const counts = await page.evaluate(() => {
     const m = window.map; if (!m) return {};
     const c = {};
-    for (const l of ['depth-area', 'depth-area-fi', 'depth-contour', 'land', 'seamark', 'light-flare', 'light-sector-arc', 'navline', 'fairway', 'hazard', 'nodata'])
+    for (const l of ['depth-area', 'depth-area-fi', 'depth-contour', 'land', 'seamark', 'light-flare', 'light-sector-arc', 'navline', 'fairway', 'hazard', 'sounding', 'danger-area', 'nodata'])
       c[l] = m.getLayer(l) ? m.queryRenderedFeatures({ layers: [l] }).length : -1;
     return c;
   });
