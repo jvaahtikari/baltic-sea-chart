@@ -1,0 +1,4 @@
+[traficom] {"source": "https://julkinen.traficom.fi/inspirepalvelu/rajoitettu/wfs", "layers": {"DepthArea_A": 149457, "DepthContour_L": 201767, "Sounding_P": 270002}, "licence": "Traficom merikarttatietokanta: not for navigation, non-commercial use, attribution with transfer date", "fetched": "2026-11-26T22:53:12Z"}
+[traficom] done in 573 s
+[mml] {"missing": "MML_API_KEY not set", "fallback": "Finnish rocks from OpenStreetMap only", "fetched": "2026-11-26T22:53:12Z"}
+[mml] done in 0 s

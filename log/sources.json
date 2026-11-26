@@ -1,0 +1,170 @@
+{
+ "name": "Baltic Sea chart",
+ "region": "baltic",
+ "region_title": "Baltic Sea",
+ "built": "2026-11-26T23:58:04Z",
+ "not_for_navigation": true,
+ "bbox": [
+  8.5,
+  53.3,
+  30.6,
+  66.2
+ ],
+ "excluded_waters": "Russia",
+ "sources": [
+  {
+   "id": "osm",
+   "name": "OpenStreetMap (OpenSeaMap seamark tagging) and OSM land polygons",
+   "provider": "OpenStreetMap contributors; land polygons by osmdata.openstreetmap.de",
+   "licence": "ODbL 1.0",
+   "licence_url": "https://opendatacommons.org/licenses/odbl/1-0/",
+   "attribution": "© OpenStreetMap contributors",
+   "layers": [
+    "land",
+    "coastline",
+    "seamark (outside Finland)",
+    "light (outside Finland)",
+    "light_sector (outside Finland)",
+    "hazard",
+    "fairway/navline (outside Finland)",
+    "tss"
+   ],
+   "fetched": "2026-11-26T23:29:41Z",
+   "endpoint": "openstreetmap.fr / Geofabrik / Overpass, per region",
+   "status": "from an earlier build (None)"
+  },
+  {
+   "id": "vayla",
+   "name": "Väylävirasto, vesiväyläaineisto (WFS)",
+   "provider": "Finnish Transport Infrastructure Agency",
+   "licence": "CC BY 4.0",
+   "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+   "attribution": "Väylävirasto",
+   "layers": [
+    "seamark (Finland)",
+    "light (Finland)",
+    "light_sector (Finland)",
+    "fairway (Finland)",
+    "navline (Finland)",
+    "leading_line"
+   ],
+   "fetched": "2026-11-26T22:44:33Z",
+   "endpoint": "https://avoinapi.vaylapilvi.fi/vaylatiedot/ows"
+  },
+  {
+   "id": "estonia",
+   "name": "Transpordiamet, Eesti navigatsioonimärkide andmekogu (INSPIRE WFS, Maa- ja Ruumiamet)",
+   "provider": "Estonian Transport Administration",
+   "licence": "Estonian open data licence (CC BY 4.0 equivalent)",
+   "licence_url": "https://geoportaal.maaamet.ee/avaandmete-litsents",
+   "attribution": "Transpordiamet / Maa- ja Ruumiamet",
+   "layers": [
+    "seamark (Estonia)",
+    "fairway (Estonia)",
+    "navline (Estonia)"
+   ],
+   "fetched": "2026-11-26T22:44:39Z",
+   "endpoint": "https://inspire.geoportaal.ee/geoserver/TN_veetransport/wfs"
+  },
+  {
+   "id": "germany",
+   "name": "BSH, Navigation marks according to S-57 (WFS)",
+   "provider": "Bundesamt für Seeschifffahrt und Hydrographie (BSH)",
+   "licence": "GeoNutzV (Nutzungsbestimmungen für die Bereitstellung von Geodaten des Bundes); not for navigation",
+   "licence_url": "http://www.gesetze-im-internet.de/geonutzv/GeoNutzV.pdf",
+   "attribution": "Quelle: © BSH",
+   "layers": [
+    "seamark (Germany)",
+    "light (Germany)",
+    "light_sector (Germany)"
+   ],
+   "fetched": "2026-11-26T22:45:12Z",
+   "endpoint": "https://gdi.bsh.de/mapservice_gs/Seezeichen/wfs"
+  },
+  {
+   "id": "traficom",
+   "name": "Traficom, merikarttatietokanta (INSPIRE WFS, rajoitettu)",
+   "provider": "Finnish Transport and Communications Agency Traficom",
+   "licence": "Traficom hydrographic data licence: not for navigation, non-commercial use only",
+   "licence_url": "https://www.traficom.fi/fi/liikenne/merenkulku/merikarttojen-aineistot",
+   "attribution": "Sisältää Liikenne- ja viestintäviraston merikarttatietokannan tietoa 11/2026. Ei navigointikäyttöön. Ei täytä asianmukaisen merikartan vaatimuksia.",
+   "layers": [
+    "depth_area (Finland)",
+    "depth_contour (Finland)",
+    "sounding (Finland)"
+   ],
+   "fetched": "2026-11-26T22:53:12Z",
+   "endpoint": "https://julkinen.traficom.fi/inspirepalvelu/rajoitettu/wfs"
+  },
+  {
+   "id": "mml",
+   "name": "Maanmittauslaitos, maastotietokanta (OGC API Features)",
+   "provider": "National Land Survey of Finland",
+   "licence": "CC BY 4.0",
+   "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+   "attribution": "Maanmittauslaitos",
+   "layers": [
+    "hazard (rocks, Finland)",
+    "danger_area (Finland)"
+   ],
+   "fetched": "2026-11-26T22:53:12Z",
+   "endpoint": null,
+   "status": "not available in this build"
+  },
+  {
+   "id": "emodnet",
+   "name": "EMODnet Bathymetry Digital Terrain Model (WCS, mean depth)",
+   "provider": "EMODnet Bathymetry Consortium",
+   "licence": "Open access, attribution required",
+   "licence_url": "https://emodnet.ec.europa.eu/en/emodnet-data-policy",
+   "attribution": "EMODnet Bathymetry Consortium: EMODnet Digital Bathymetry (DTM)",
+   "layers": [
+    "depth_area (outside Finland)",
+    "depth_contour (outside Finland)"
+   ],
+   "fetched": "2026-11-26T22:44:31Z",
+   "endpoint": "https://ows.emodnet-bathymetry.eu/wcs"
+  },
+  {
+   "id": "marineregions",
+   "name": "Marine Regions: IHO sea areas and maritime boundaries (WFS)",
+   "provider": "Flanders Marine Institute (VLIZ)",
+   "licence": "CC BY 4.0",
+   "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+   "attribution": "Marine Regions (VLIZ)",
+   "layers": [
+    "nodata",
+    "area of the package"
+   ],
+   "fetched": "2026-11-26T22:44:16Z",
+   "endpoint": "https://geo.vliz.be/geoserver/MarineRegions/wfs"
+  }
+ ],
+ "features": {
+  "nodata": 1,
+  "land": 208814,
+  "coastline": 198346,
+  "danger_area_depth": 0,
+  "depth_nat_area": 106808,
+  "depth_nat_contour": 135143,
+  "sounding": 172518,
+  "depth_area": 365,
+  "depth_contour": 215409,
+  "seamark": 32904,
+  "light": 10864,
+  "light_sector": 78795,
+  "hazard": 27738,
+  "danger_area": 0,
+  "fairway": 2788,
+  "navline": 8335,
+  "leading_line": 1425,
+  "tss": 266
+ },
+ "tiles_mb": {
+  "land.pmtiles": 47.6,
+  "coastline.pmtiles": 49.1,
+  "chart.pmtiles": 59.3,
+  "depth.pmtiles": 74.0,
+  "depth-national.pmtiles": 56.9
+ }
+}

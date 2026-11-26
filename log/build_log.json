@@ -1,0 +1,247 @@
+{
+ "features": {
+  "nodata": 1,
+  "land": 208814,
+  "coastline": 198346,
+  "danger_area_depth": 0,
+  "depth_nat_area": 106808,
+  "depth_nat_contour": 135143,
+  "sounding": 172518,
+  "depth_area": 365,
+  "depth_contour": 215409,
+  "seamark": 32904,
+  "light": 10864,
+  "light_sector": 78795,
+  "hazard": 27738,
+  "danger_area": 0,
+  "fairway": 2788,
+  "navline": 8335,
+  "leading_line": 1425,
+  "tss": 266
+ },
+ "zooms": {
+  "nodata": {
+   "min": [],
+   "max": []
+  },
+  "land": {
+   "min": [
+    8
+   ],
+   "max": [
+    7
+   ]
+  },
+  "coastline": {
+   "min": [
+    6
+   ],
+   "max": []
+  },
+  "danger_area_depth": {
+   "min": [],
+   "max": []
+  },
+  "depth_nat_area": {
+   "min": [
+    9
+   ],
+   "max": []
+  },
+  "depth_nat_contour": {
+   "min": [
+    11
+   ],
+   "max": []
+  },
+  "sounding": {
+   "min": [
+    12,
+    13
+   ],
+   "max": []
+  },
+  "depth_area": {
+   "min": [
+    3,
+    5,
+    9
+   ],
+   "max": [
+    8
+   ]
+  },
+  "depth_contour": {
+   "min": [
+    5,
+    7,
+    9,
+    10
+   ],
+   "max": [
+    8
+   ]
+  },
+  "seamark": {
+   "min": [
+    8,
+    9,
+    10,
+    11
+   ],
+   "max": []
+  },
+  "light": {
+   "min": [
+    8,
+    10
+   ],
+   "max": []
+  },
+  "light_sector": {
+   "min": [
+    11,
+    12,
+    13,
+    15
+   ],
+   "max": [
+    12,
+    14
+   ]
+  },
+  "hazard": {
+   "min": [
+    12,
+    13
+   ],
+   "max": []
+  },
+  "danger_area": {
+   "min": [],
+   "max": []
+  },
+  "fairway": {
+   "min": [
+    9
+   ],
+   "max": []
+  },
+  "navline": {
+   "min": [
+    10
+   ],
+   "max": []
+  },
+  "leading_line": {
+   "min": [
+    10
+   ],
+   "max": []
+  },
+  "tss": {
+   "min": [
+    6
+   ],
+   "max": []
+  }
+ },
+ "areas_km2": {
+  "aoi": 521460,
+  "excluded": 24869,
+  "fi_zone": 86580,
+  "ee_zone": 37305,
+  "de_zone": 16636,
+  "no_zone": 0,
+  "nat_zone": 86580,
+  "iho": 417107
+ },
+ "seconds": {
+  "areas": 15,
+  "land": 68,
+  "depth": 359,
+  "marks": 914,
+  "routes": 3,
+  "tiles": 341
+ },
+ "traficom_depth_areas_used": 106808,
+ "kartverket_depth_areas_used": 0,
+ "emodnet": {
+  "grid": [
+   21216,
+   12384
+  ],
+  "sign": -1.0,
+  "median_raw": -27.059999465942383,
+  "fi_masked_cells": 8433542,
+  "aoi_cells": 74839140
+ },
+ "estonia_marks": 1104,
+ "estonia_category_from_osm": 17,
+ "germany_marks": 3081,
+ "germany_lights": 1985,
+ "mml_features": 0,
+ "kartverket_rocks": 0,
+ "marks_dropped": {
+  "outside": 51293,
+  "inland": 3188
+ },
+ "kystverket_leading_lines": 0,
+ "tiles_mb": {
+  "land.pmtiles": 47.6,
+  "coastline.pmtiles": 49.1,
+  "chart.pmtiles": 59.3,
+  "depth.pmtiles": 74.0,
+  "depth-national.pmtiles": 56.9
+ },
+ "tiles_settings": {
+  "land.pmtiles": {
+   "maxzoom": 13,
+   "simplification": 2,
+   "layers": [
+    "land"
+   ]
+  },
+  "coastline.pmtiles": {
+   "maxzoom": 13,
+   "simplification": 2,
+   "layers": [
+    "coastline"
+   ]
+  },
+  "chart.pmtiles": {
+   "maxzoom": 15,
+   "simplification": 2,
+   "layers": [
+    "nodata",
+    "seamark",
+    "light",
+    "light_sector",
+    "hazard",
+    "danger_area",
+    "danger_area_depth",
+    "sounding",
+    "fairway",
+    "navline",
+    "leading_line",
+    "tss"
+   ]
+  },
+  "depth.pmtiles": {
+   "maxzoom": 12,
+   "simplification": 4,
+   "layers": [
+    "depth_area",
+    "depth_contour"
+   ]
+  },
+  "depth-national.pmtiles": {
+   "maxzoom": 12,
+   "simplification": 4,
+   "layers": [
+    "depth_nat_area",
+    "depth_nat_contour"
+   ]
+  }
+ }
+}

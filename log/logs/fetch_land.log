@@ -1,0 +1,4 @@
+$ ogr2ogr -f GeoJSONSeq -overwrite /home/runner/work/baltic-sea-chart/baltic-sea-chart/work/raw/land/land.geojsonl /vsizip//home/runner/work/baltic-sea-chart/baltic-sea-chart/work/raw/land/land-polygons-complete-4326.zip/land-polygons-complete-4326/land_polygons.shp -clipsrc 8.5 53.3 30.6 66.2 -explodecollections -lco RS=NO
+$ ogr2ogr -f GeoJSONSeq -overwrite /home/runner/work/baltic-sea-chart/baltic-sea-chart/work/raw/land/land_simplified.geojsonl /vsizip//home/runner/work/baltic-sea-chart/baltic-sea-chart/work/raw/land/simplified-land-polygons-complete-3857.zip/simplified-land-polygons-complete-3857/simplified_land_polygons.shp -t_srs EPSG:4326 -clipdst 6.5 51.3 32.6 68.2 -explodecollections -lco RS=NO
+[land] {"source": "https://osmdata.openstreetmap.de/download/", "files": ["land-polygons-complete-4326.zip", "simplified-land-polygons-complete-3857.zip"], "licence": "ODbL 1.0, © OpenStreetMap contributors", "fetched": "2026-11-26T22:46:07Z"}
+[land] done in 149 s

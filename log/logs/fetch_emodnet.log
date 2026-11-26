@@ -1,0 +1,2 @@
+[emodnet] {"source": "https://ows.emodnet-bathymetry.eu/wcs", "coverage": "emodnet__mean", "chunks": 84, "mb": 1204.7, "licence": "EMODnet Bathymetry, open access with attribution", "fetched": "2026-11-26T22:44:31Z"}
+[emodnet] done in 52 s
