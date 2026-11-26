@@ -1,0 +1,10 @@
+overview {"depth-area":46,"depth-area-nat":10573,"depth-contour":2483,"land":2698,"seamark":1,"light-flare":1,"light-sector-arc":0,"navline":0,"fairway":0,"hazard":0,"sounding":0,"danger-area":0,"nodata":0}
+bergen {"depth-area":66,"depth-area-nat":4262,"depth-contour":1884,"land":1210,"seamark":46,"light-flare":94,"light-sector-arc":0,"navline":0,"fairway":0,"hazard":0,"sounding":0,"danger-area":0,"nodata":0}
+bergen_detail {"depth-area":35,"depth-area-nat":456,"depth-contour":70,"land":6,"seamark":7,"light-flare":2,"light-sector-arc":0,"navline":0,"fairway":0,"hazard":0,"sounding":141,"danger-area":0,"nodata":0}
+bergen_port {"depth-area":8,"depth-area-nat":244,"depth-contour":10,"land":2,"seamark":2,"light-flare":1,"light-sector-arc":0,"navline":0,"fairway":0,"hazard":0,"sounding":225,"danger-area":0,"nodata":0}
+marstein {"depth-area":13,"depth-area-nat":261,"depth-contour":40,"land":43,"seamark":8,"light-flare":4,"light-sector-arc":31,"navline":0,"fairway":0,"hazard":0,"sounding":3,"danger-area":0,"nodata":0}
+askoy {"depth-area":31,"depth-area-nat":689,"depth-contour":268,"land":132,"seamark":40,"light-flare":11,"light-sector-arc":17,"navline":0,"fairway":0,"hazard":0,"sounding":29,"danger-area":0,"nodata":0}
+sotra {"depth-area":38,"depth-area-nat":958,"depth-contour":306,"land":442,"seamark":52,"light-flare":4,"light-sector-arc":30,"navline":0,"fairway":0,"hazard":0,"sounding":0,"danger-area":0,"nodata":0}
+overview_dark {"depth-area":46,"depth-area-nat":10573,"depth-contour":2483,"land":2698,"seamark":1,"light-flare":1,"light-sector-arc":0,"navline":0,"fairway":0,"hazard":0,"sounding":0,"danger-area":0,"nodata":0}
+bergen_dark {"depth-area":66,"depth-area-nat":4262,"depth-contour":1884,"land":1210,"seamark":46,"light-flare":94,"light-sector-arc":0,"navline":0,"fairway":0,"hazard":0,"sounding":0,"danger-area":0,"nodata":0}
+bergen_detail_dark {"depth-area":35,"depth-area-nat":456,"depth-contour":70,"land":6,"seamark":7,"light-flare":2,"light-sector-arc":0,"navline":0,"fairway":0,"hazard":0,"sounding":141,"danger-area":0,"nodata":0}

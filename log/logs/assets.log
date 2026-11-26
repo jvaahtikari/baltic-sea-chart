@@ -1,0 +1,3 @@
+$ node /home/runner/work/baltic-sea-chart/baltic-sea-chart/tools/sprite.mjs /home/runner/work/baltic-sea-chart/baltic-sea-chart/dist
+sprite: 56 icons -> /home/runner/work/baltic-sea-chart/baltic-sea-chart/dist
+assets written to /home/runner/work/baltic-sea-chart/baltic-sea-chart/dist

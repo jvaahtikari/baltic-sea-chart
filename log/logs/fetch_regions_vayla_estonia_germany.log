@@ -1,0 +1,5 @@
+[regions] {"source": "https://geo.vliz.be/geoserver/MarineRegions/wfs", "licence": "CC BY 4.0 (Marine Regions, VLIZ)", "layers": {"iho": {"layer": "envelope", "features": 1, "names": ["envelope"]}, "no_eez": {"layer": "eez", "filter": "territory1='Norway'", "features": 3, "names": ["Joint regime area: Norway / Russia", "Joint regime area: Sweden / Norway", "Norwegian Exclusive Economic Zone"]}, "no_12nm": {"layer": "eez_12nm", "filter": "territory1='Norway'", "features": 1, "names": ["Norwegian 12 NM"]}, "no_internal": {"layer": "eez_internal_waters", "filter": "territory1='Norway'", "features": 1, "names": ["Norwegian Internal Waters"]}}, "fetched": "2026-11-26T22:06:47Z"}
+[regions] done in 4 s
+[vayla] not used in region probe-norway
+[estonia] not used in region probe-norway
+[germany] not used in region probe-norway

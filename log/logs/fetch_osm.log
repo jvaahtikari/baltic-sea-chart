@@ -1,0 +1,4 @@
+$ osmium tags-filter --overwrite -o /home/runner/work/baltic-sea-chart/baltic-sea-chart/work/raw/osm/norway_seamark.osm.pbf /home/runner/work/baltic-sea-chart/baltic-sea-chart/work/raw/osm/norway.osm.pbf nwr/seamark:type
+$ osmium export --overwrite -f geojsonseq -x print_record_separator=false --geometry-types=point,linestring,polygon -a type,id -o /home/runner/work/baltic-sea-chart/baltic-sea-chart/work/raw/osm/norway.geojsonl /home/runner/work/baltic-sea-chart/baltic-sea-chart/work/raw/osm/norway_seamark.osm.pbf
+[osm] {"source": "openstreetmap.fr / Geofabrik / Overpass, per region", "features": 137065, "regions": {"norway": {"source": "openstreetmap.fr", "features": 139887, "fetched": "2026-11-26T22:08:10Z"}}, "stale": false, "missing": false, "licence": "ODbL 1.0, © OpenStreetMap contributors", "fetched": "2026-11-26T22:08:10Z"}
+[osm] done in 87 s

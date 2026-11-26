@@ -1,0 +1,46 @@
+== build areas
+  nodata: 0 features
+  areas km2: {'aoi': 6427, 'excluded': 0, 'fi_zone': 0, 'ee_zone': 0, 'de_zone': 0, 'no_zone': 4009, 'nat_zone': 4009, 'iho': 6427}
+== build land
+  land: 6486 features
+  coastline: 5326 features
+== build depth
+  Traficom done (0 s)
+  danger_area_depth: 13783 features
+  depth_nat_area: 21729 features
+  depth_nat_contour: 34440 features
+  sounding: 155101 features
+  Kartverket done (46 s)
+$ gdalbuildvrt -overwrite /home/runner/work/baltic-sea-chart/baltic-sea-chart/work/depth/emodnet.vrt /home/runner/work/baltic-sea-chart/baltic-sea-chart/work/raw/emodnet/chunk_004.600_059.800.tif
+0...10...20...30...40...50...60...70...80...90...100 - done.
+$ gdal_translate -q -r average -outsize 25% 25% -co COMPRESS=DEFLATE /home/runner/work/baltic-sea-chart/baltic-sea-chart/work/depth/emodnet_overview_full.tif /home/runner/work/baltic-sea-chart/baltic-sea-chart/work/depth/emodnet_overview.tif
+  depth rasters written (58 s)
+  emodnet_overview.tif: 1 windows
+  EMODnet overview contours done (59 s)
+  emodnet_detail.tif: 1 windows
+  EMODnet detail contours done (61 s)
+  depth_area: 20 features
+  depth_contour: 11017 features
+== build marks
+  seamark: 1281 features
+  light: 437 features
+  light_sector: 6327 features
+  hazard: 1181 features
+  danger_area: 0 features
+== build routes
+  fairway: 0 features
+  navline: 2 features
+  leading_line: 4 features
+  tss: 2 features
+== build tiles
+$ tippecanoe -q -o /home/runner/work/baltic-sea-chart/baltic-sea-chart/dist/land.pmtiles --force -Z0 -z13 --name Baltic Sea chart: land --attribution see sources.json -r1 --simplification=2 --detect-shared-borders --no-tile-size-limit -L land:/home/runner/work/baltic-sea-chart/baltic-sea-chart/work/mid/land.geojsonl -j {"land": ["all", ["any", ["!has", "minzoom"], ["all", ["==", "minzoom", 8], [">=", "$zoom", 8]]], ["any", ["!has", "maxzoom"], ["all", ["==", "maxzoom", 7], ["<=", "$zoom", 7]]]]}
+  land.pmtiles: 1.9 MB (maxzoom 13, simplification 2, layers land)
+$ tippecanoe -q -o /home/runner/work/baltic-sea-chart/baltic-sea-chart/dist/coastline.pmtiles --force -Z0 -z13 --name Baltic Sea chart: coastline --attribution see sources.json -r1 --simplification=2 --no-tile-size-limit -L coastline:/home/runner/work/baltic-sea-chart/baltic-sea-chart/work/mid/coastline.geojsonl -j {"coastline": ["all", ["any", ["!has", "minzoom"], ["all", ["==", "minzoom", 6], [">=", "$zoom", 6]]]]}
+  coastline.pmtiles: 1.8 MB (maxzoom 13, simplification 2, layers coastline)
+$ tippecanoe -q -o /home/runner/work/baltic-sea-chart/baltic-sea-chart/dist/chart.pmtiles --force -Z0 -z15 --name Baltic Sea chart: seamarks and routes --attribution see sources.json -r1 --simplification=2 --no-tile-size-limit --no-feature-limit -L nodata:/home/runner/work/baltic-sea-chart/baltic-sea-chart/work/mid/nodata.geojsonl -L seamark:/home/runner/work/baltic-sea-chart/baltic-sea-chart/work/mid/seamark.geojsonl -L light:/home/runner/work/baltic-sea-chart/baltic-sea-chart/work/mid/light.geojsonl -L light_sector:/home/runner/work/baltic-sea-chart/baltic-sea-chart/work/mid/light_sector.geojsonl -L hazard:/home/runner/work/baltic-sea-chart/baltic-sea-chart/work/mid/hazard.geojsonl -L danger_area:/home/runner/work/baltic-sea-chart/baltic-sea-chart/work/mid/danger_area.geojsonl -L danger_area_depth:/home/runner/work/baltic-sea-chart/baltic-sea-chart/work/mid/danger_area_depth.geojsonl -L sounding:/home/runner/work/baltic-sea-chart/baltic-sea-chart/work/mid/sounding.geojsonl -L fairway:/home/runner/work/baltic-sea-chart/baltic-sea-chart/work/mid/fairway.geojsonl -L navline:/home/runner/work/baltic-sea-chart/baltic-sea-chart/work/mid/navline.geojsonl -L leading_line:/home/runner/work/baltic-sea-chart/baltic-sea-chart/work/mid/leading_line.geojsonl -L tss:/home/runner/work/baltic-sea-chart/baltic-sea-chart/work/mid/tss.geojsonl -j {"seamark": ["all", ["any", ["!has", "minzoom"], ["all", ["==", "minzoom", 8], [">=", "$zoom", 8]], ["all", ["==", "minzoom", 10], [">=", "$zoom", 10]], ["all", ["==", "minzoom", 11], [">=", "$zoom", 11]]]], "light": ["all", ["any", ["!has", "minzoom"], ["all", ["==", "minzoom", 8], [">=", "$zoom", 8]], ["all", ["==", "minzoom", 10], [">=", "$zoom", 10]]]], "light_sector": ["all", ["any", ["!has", "minzoom"], ["all", ["==", "minzoom", 11], [">=", "$zoom", 11]], ["all", ["==", "minzoom", 12], [">=", "$zoom", 12]], ["all", ["==", "minzoom", 13], [">=", "$zoom", 13]], ["all", ["==", "minzoom", 15], [">=", "$zoom", 15]]], ["any", ["!has", "maxzoom"], ["all", ["==", "maxzoom", 12], ["<=", "$zoom", 12]], ["all", ["==", "maxzoom", 14], ["<=", "$zoom", 14]]]], "hazard": ["all", ["any", ["!has", "minzoom"], ["all", ["==", "minzoom", 12], [">=", "$zoom", 12]], ["all", ["==", "minzoom", 13], [">=", "$zoom", 13]]]], "danger_area_depth": ["all", ["any", ["!has", "minzoom"], ["all", ["==", "minzoom", 11], [">=", "$zoom", 11]]]], "sounding": ["all", ["any", ["!has", "minzoom"], ["all", ["==", "minzoom", 12], [">=", "$zoom", 12]], ["all", ["==", "minzoom", 13], [">=", "$zoom", 13]]]], "navline": ["all", ["any", ["!has", "minzoom"], ["all", ["==", "minzoom", 10], [">=", "$zoom", 10]]]], "leading_line": ["all", ["any", ["!has", "minzoom"], ["all", ["==", "minzoom", 10], [">=", "$zoom", 10]]]], "tss": ["all", ["any", ["!has", "minzoom"], ["all", ["==", "minzoom", 6], [">=", "$zoom", 6]]]]}
+  chart.pmtiles: 12.5 MB (maxzoom 15, simplification 2, layers nodata,seamark,light,light_sector,hazard,danger_area,danger_area_depth,sounding,fairway,navline,leading_line,tss)
+$ tippecanoe -q -o /home/runner/work/baltic-sea-chart/baltic-sea-chart/dist/depth.pmtiles --force -Z0 -z12 --name Baltic Sea chart: depth (EMODnet) --attribution see sources.json -r1 --simplification=4 --detect-shared-borders --no-tile-size-limit -L depth_area:/home/runner/work/baltic-sea-chart/baltic-sea-chart/work/mid/depth_area.geojsonl -L depth_contour:/home/runner/work/baltic-sea-chart/baltic-sea-chart/work/mid/depth_contour.geojsonl -j {"depth_area": ["all", ["any", ["!has", "minzoom"], ["all", ["==", "minzoom", 3], [">=", "$zoom", 3]], ["all", ["==", "minzoom", 5], [">=", "$zoom", 5]], ["all", ["==", "minzoom", 9], [">=", "$zoom", 9]]], ["any", ["!has", "maxzoom"], ["all", ["==", "maxzoom", 8], ["<=", "$zoom", 8]]]], "depth_contour": ["all", ["any", ["!has", "minzoom"], ["all", ["==", "minzoom", 5], [">=", "$zoom", 5]], ["all", ["==", "minzoom", 7], [">=", "$zoom", 7]], ["all", ["==", "minzoom", 9], [">=", "$zoom", 9]], ["all", ["==", "minzoom", 10], [">=", "$zoom", 10]]], ["any", ["!has", "maxzoom"], ["all", ["==", "maxzoom", 8], ["<=", "$zoom", 8]]]]}
+  depth.pmtiles: 2.2 MB (maxzoom 12, simplification 4, layers depth_area,depth_contour)
+$ tippecanoe -q -o /home/runner/work/baltic-sea-chart/baltic-sea-chart/dist/depth-national.pmtiles --force -Z0 -z12 --name Baltic Sea chart: depth in Finnish waters (Traficom) --attribution see sources.json -r1 --simplification=4 --detect-shared-borders --no-tile-size-limit -L depth_nat_area:/home/runner/work/baltic-sea-chart/baltic-sea-chart/work/mid/depth_nat_area.geojsonl -L depth_nat_contour:/home/runner/work/baltic-sea-chart/baltic-sea-chart/work/mid/depth_nat_contour.geojsonl -j {"depth_nat_area": ["all", ["any", ["!has", "minzoom"], ["all", ["==", "minzoom", 9], [">=", "$zoom", 9]]]], "depth_nat_contour": ["all", ["any", ["!has", "minzoom"], ["all", ["==", "minzoom", 11], [">=", "$zoom", 11]]]]}
+  depth-national.pmtiles: 8.6 MB (maxzoom 12, simplification 4, layers depth_nat_area,depth_nat_contour)
+  tiles MB: {'land.pmtiles': 1.9, 'coastline.pmtiles': 1.8, 'chart.pmtiles': 12.5, 'depth.pmtiles': 2.2, 'depth-national.pmtiles': 8.6}
