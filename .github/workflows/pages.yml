@@ -1,0 +1,65 @@
+name: Publish Pages (latest Baltic package + probe packages)
+
+# Republishes the GitHub Pages site in a few minutes without a rebuild: the Baltic package from the
+# "latest" release, the demo page files from the repository, and every package-<region> branch
+# (probe builds) under packages/<region>/, so that they can be viewed with
+# index.html?package=packages/<region>/ .
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-publish
+  cancel-in-progress: true
+
+jobs:
+  assemble:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Baltic package from the latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dist
+          gh release download latest -R "$GITHUB_REPOSITORY" -p baltic-sea-chart.zip -O pkg.zip
+          unzip -q pkg.zip -d dist && rm pkg.zip
+          cp site/index.html site/chart-style.js site/overlay.html dist/ 2>/dev/null || true
+          du -sh dist
+      - name: Probe packages from package-* branches
+        run: |
+          for br in $(git ls-remote --heads origin 'package-*' | awk '{print $2}' | sed 's#refs/heads/##'); do
+            region="${br#package-}"
+            echo "== $br -> packages/$region"
+            git fetch --depth 1 origin "$br"
+            mkdir -p "dist/packages/$region"
+            git --work-tree="dist/packages/$region" checkout FETCH_HEAD -- .
+            git reset -q
+            # fonts and the map libraries are shared with the main package
+            rm -rf "dist/packages/$region/fonts" "dist/packages/$region/lib"
+            ln -s ../../fonts "dist/packages/$region/fonts" 2>/dev/null || true
+          done
+          # Pages does not follow symlinks: copy the fonts instead
+          for d in dist/packages/*/; do rm -f "$d/fonts"; cp -r dist/fonts "$d/fonts"; done 2>/dev/null || true
+          du -sh dist dist/packages/* 2>/dev/null || true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  pages:
+    needs: assemble
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
