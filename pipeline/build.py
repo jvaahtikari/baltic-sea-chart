@@ -50,6 +50,12 @@ def read_seq(path):
                 yield json.loads(line)
 
 
+def clean_text(v):
+    """Labels keep Latin letters, digits and common punctuation: the package ships glyphs for those ranges
+    only, and a stray symbol would make the browser ask for a glyph file that is not there."""
+    return "".join(ch for ch in v if ord(ch) < 0x2000 or 0x2010 <= ord(ch) <= 0x203A).strip()
+
+
 class Writer:
     """GeoJSONSeq writer. Zoom limits are stored as the attributes minzoom/maxzoom and applied with
     a tippecanoe -j filter in step_tiles: tippecanoe's own per-feature "tippecanoe" member merges
@@ -66,7 +72,7 @@ class Writer:
     def add(self, geom, props, minzoom=None, maxzoom=None):
         if geom is None or geom.is_empty:
             return
-        props = {k: v for k, v in props.items() if v is not None and v != ""}
+        props = {k: (clean_text(v) if isinstance(v, str) else v) for k, v in props.items() if v is not None and v != ""}
         if minzoom:
             props["minzoom"] = int(minzoom)
             self.mins.add(int(minzoom))
@@ -908,39 +914,33 @@ def step_marks():
                              "major": major, "src": "osm"}, minzoom=8 if major else 10)
             add_sectors(w_sect, lon, lat, secs, "osm")
 
-    # --- Norway: Kystverket aids to navigation. The attribute vocabulary is logged (top values per field)
-    #     so that the symbol mapping below can be completed from real data.
+    # --- Norway: Kystverket aids to navigation (lights, fixed and floating marks, sectors)
     if use_no:
-        from collections import Counter
         nd = RAW / "norway"
-        vocab = {}
-
-        def note(layer, p, fields):
-            for f in fields:
-                vocab.setdefault(layer + "." + f, Counter())[str(p.get(f))] += 1
-
-        n_no = {"light": 0, "mark": 0, "skipped": 0}
+        n_no = {"light": 0, "mark": 0, "sector": 0, "skipped": 0}
+        light_pts = []
         for ft in read_seq(nd / "aids_Lys.geojsonl"):
             pt = point_of(ft)
             p = ft["properties"]
             if pt is None or not no_zone.contains(pt) or not ok(pt.x, pt.y):
                 n_no["skipped"] += 1
                 continue
-            note("Lys", p, ("klasse", "kategori", "funksjon", "nautisk_funksjon", "lys_type", "lys_farge", "lys_karakter",
-                            "karakter", "periode", "landemerke_type", "fundament_type", "nfs_status", "type_id"))
+            klasse = str(p.get("klasse") or "")
             cols = [c for c in "WRGY" if (num(p.get({"W": "rekkevidde_hvit", "R": "rekkevidde_rod", "G": "rekkevidde_gronn",
                                                      "Y": "rekkevidde_gul"}[c])) or 0) > 0]
-            label = p.get("lys_karakter") or p.get("karakter") or None
+            if not cols:
+                cols = [NO_COLOUR.get(str(p.get("lys_farge")), "W")]
             rng = max([num(p.get(k)) or 0 for k in ("rekkevidde_hvit", "rekkevidde_rod", "rekkevidde_gronn",
                                                    "rekkevidde_gul")]) or None
-            major = bool((rng or 0) >= 15 or "fyr" in str(p.get("klasse") or "").lower())
-            w_light.add(pt, {"label": label, "colour": "".join(cols) or "W", "height": num(p.get("lys_hoyde")),
+            major = klasse.startswith("FS") or (rng or 0) >= 15
+            w_light.add(pt, {"label": no_light_label(p.get("karakter")), "colour": "".join(cols), "height": num(p.get("lys_hoyde")),
                              "range": rng, "major": major, "name": p.get("navn"), "src": "kystverket"},
                         minzoom=8 if major else 10)
-            kind = no_kind(p)
+            light_pts.append((pt.x, pt.y))
+            kind, cat = no_light_kind(p)
             if kind:
-                w_mark.add(pt, {"kind": kind, "cat": no_category(p), "name": p.get("navn"), "lit": True,
-                                "src": "kystverket"}, minzoom=mark_minzoom(kind))
+                w_mark.add(pt, {"kind": kind, "cat": cat, "name": p.get("navn"), "lit": True, "src": "kystverket"},
+                           minzoom=mark_minzoom(kind))
             n_no["light"] += 1
         for layer in ("Fast_sjømerke", "Flytende_merke"):
             for ft in read_seq(nd / ("aids_" + layer + ".geojsonl")):
@@ -949,22 +949,37 @@ def step_marks():
                 if pt is None or not no_zone.contains(pt) or not ok(pt.x, pt.y):
                     n_no["skipped"] += 1
                     continue
-                note(layer, p, tuple(k for k in p if k not in ("GmlID", "objectid", "globalid", "navn", "sted",
-                                                                  "beliggenhet", "opprettet_av", "opprettet_dato",
-                                                                  "oppdatert_av", "oppdatert_dato", "gis_obj_id",
-                                                                  "sjomerke_nr", "nav_id", "beskrivelse")))
-                kind = no_kind(p) or ("buoy" if layer == "Flytende_merke" else "beacon")
-                w_mark.add(pt, {"kind": kind, "cat": no_category(p), "name": p.get("navn"), "lit": False,
+                kind, cat, top = no_mark_kind(p, layer)
+                w_mark.add(pt, {"kind": kind, "cat": cat, "name": p.get("navn"), "lit": False, "topmark": top,
                                 "src": "kystverket"}, minzoom=mark_minzoom(kind))
                 n_no["mark"] += 1
-        for layer in ("Sektorlinje", "Sektorflate", "Racon", "IB", "Overettlinje_lys", "Overettlinje_merke"):
-            for i, ft in enumerate(read_seq(nd / ("aids_" + layer + ".geojsonl"))):
-                if i >= 2:
-                    break
-                vocab[layer + ".sample%d" % i] = {str(k): str(v)[:80] for k, v in ft["properties"].items()}
-                vocab[layer + ".geometry"] = {ft.get("geometry", {}).get("type", "?"): 1}
+        # Sectors: Sektorflate is the fan of each sector; its apex is the vertex nearest to a light.
+        if light_pts:
+            ltree = shapely.STRtree([Point(x, y) for x, y in light_pts])
+            for ft in read_seq(nd / "aids_Sektorflate.geojsonl"):
+                g = shape(ft["geometry"]) if ft.get("geometry") else None
+                if g is None or g.is_empty:
+                    continue
+                p = ft["properties"]
+                s0, s1 = num(p.get("retning_sektorlinje_1")), num(p.get("retning_sektorlinje_2"))
+                if s0 is None or s1 is None:
+                    continue
+                verts = shapely.get_coordinates(g)
+                if len(verts) == 0 or not no_zone.contains(g.representative_point()):
+                    continue
+                vpts = [Point(x, y) for x, y in verts]
+                best, bestd = None, 1e9
+                for v in vpts:
+                    i = ltree.nearest(v)
+                    d_ = v.distance(ltree.geometries[i])
+                    if d_ < bestd:
+                        best, bestd = v, d_
+                if best is None or bestd > 0.0005:     # no light within ~50 m: not a light sector we know
+                    continue
+                col = NO_COLOUR.get(str(p.get("lys_farge")), "W")
+                add_sectors(w_sect, best.x, best.y, [(s0, s1, col)], "no")
+                n_no["sector"] += 1
         LOG["norway_marks"] = n_no
-        LOG["norway_vocab"] = {k: (dict(v.most_common(25)) if hasattr(v, "most_common") else v) for k, v in vocab.items()}
 
     # --- Finland: rocks, rocky areas and shoals of the MML topographic database (optional source)
     w_dng = Writer("danger_area")
@@ -1124,34 +1139,54 @@ def estonian_mark(name, layer):
     return kind, cat
 
 
-# Kystverket attribute vocabulary -> symbol kind. Provisional: the probe run logs the real values
-# (build_log.json: norway_vocab) and this table is completed from them.
-NO_KINDS = [
-    ("fyr", "lighthouse"), ("lykt", "light"), ("hib", "light"), ("lanterne", "light"), ("stake", "spar"),
-    ("stang", "spar"), ("bøye", "buoy"), ("boye", "buoy"), ("lysbøye", "buoy"), ("varde", "cairn"),
-    ("båke", "beacon"), ("bake", "beacon"), ("jernstang", "spar"), ("jernsøyle", "beacon"), ("overett", "leading_mark"),
-    ("stolpe", "beacon"), ("tavle", "daymark"),
-]
+# Kystverket attribute vocabulary -> symbols (from the attribute values of the real data, Vestland probe)
+NO_COLOUR = {"Hvit": "W", "Rød": "R", "Grønn": "G", "Gul": "Y", "Blå": "Bu"}
+NO_LATERAL = {"Rød": "port", "Grønn": "starboard", "Gul": "special"}
 
 
-def no_kind(p):
-    text = " ".join(str(p.get(k) or "") for k in ("klasse", "kategori", "funksjon", "nautisk_funksjon", "lys_type",
-                                                   "type_id", "landemerke_type", "sjomerke_type", "merketype")).lower()
-    for key, kind in NO_KINDS:
-        if key in text:
-            return kind
-    return None
+def no_light_label(karakter):
+    """'Fast R lys' -> 'F R', 'Oc (2) WRG 8s' -> 'Oc(2) WRG 8s', 'VQ G 0,5s' -> 'VQ G 0.5s'."""
+    k = (karakter or "").strip()
+    if not k:
+        return None
+    k = re.sub(r"^Fast\s+", "F ", k).replace(" lys", "").replace(" (", "(").replace(",", ".")
+    return k
 
 
-def no_category(p):
-    """IALA category (lateral/cardinal) when the attributes say it; otherwise None."""
-    text = " ".join(str(p.get(k) or "") for k in p).lower()
-    for key, cat in (("babord", "port"), ("styrbord", "starboard"), ("nord", "north"), ("sør", "south"), ("sor", "south"),
-                     ("øst", "east"), ("ost", "east"), ("vest", "west"), ("midtgrunn", "isolated_danger"),
-                     ("sikkert farvann", "safe_water"), ("spesial", "special")):
-        if key in text:
-            return cat
-    return None
+def no_light_kind(p):
+    """Mark drawn under a Kystverket light: (kind, IALA category)."""
+    klasse = str(p.get("klasse") or "")
+    type_id = str(p.get("type_id") or "")
+    cat = ("port" if type_id.startswith("Babord") else "starboard" if type_id.startswith("Styrbord")
+           else "special" if type_id.startswith("Spesial") else None)
+    if klasse.startswith("FS"):
+        return "lighthouse", None
+    if klasse.startswith("LB") or "bøye" in type_id.lower():
+        return "buoy", cat
+    if klasse.startswith("FL"):
+        return "light", cat      # fyrlykt: a lantern on a small structure
+    if klasse.startswith("HIB"):
+        return "beacon", cat     # fast-craft mark with indirect lighting: a pole
+    return "light", cat          # lanterne and others
+
+
+def no_mark_kind(p, layer):
+    """Fixed and floating marks: (kind, IALA category, has topmark)."""
+    klasse = str(p.get("klasse") or "")
+    type_id = str(p.get("type_id") or "")
+    top = str(p.get("toppmerke_type") or "Ingen") not in ("Ingen", "None", "Udefinert", "")
+    cat = ("port" if type_id.startswith("Babord") else "starboard" if type_id.startswith("Styrbord")
+           else "special" if type_id.startswith("Spesial") else None)
+    if layer == "Flytende_merke":
+        cat = cat or NO_LATERAL.get(str(p.get("farge_1")))
+        return "buoy", cat, top
+    if klasse.startswith("VA"):
+        return "cairn", None, False
+    if klasse.startswith("BK"):
+        return "beacon", cat, top
+    # SG - Stang: an iron perch on a rock; its reflector colour says which side to pass
+    cat = cat or NO_LATERAL.get(str(p.get("refleks_farge")))
+    return "spar", cat, top
 
 
 def mark_minzoom(kind):
