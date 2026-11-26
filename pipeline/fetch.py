@@ -5,6 +5,7 @@ Each step writes into work/raw/<step>/ and records what it fetched in work/raw/<
 """
 import concurrent.futures as cf
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -111,9 +112,19 @@ def step_regions():
         if not j["features"]:
             raise RuntimeError("Marine Regions returned nothing for %s %s" % (layer, cql))
 
-    mr("iho", "mrgid IN (%s)" % ",".join(map(str, C.IHO_MRGIDS)), "iho")
-    for terr, tag in ((C.EXCLUDED_TERRITORY, "excluded"), (C.FI_TERRITORY, "fi"), (C.EE_TERRITORY, "ee"),
-                      (C.DE_TERRITORY, "de")):
+    if C.IHO_MRGIDS:
+        mr("iho", "mrgid IN (%s)" % ",".join(map(str, C.IHO_MRGIDS)), "iho")
+    elif C.IHO_NAMES:
+        mr("iho", "name IN (%s)" % ",".join("'%s'" % n.replace("'", "''") for n in C.IHO_NAMES), "iho")
+    else:   # the whole envelope is the area of interest (test regions)
+        x0, y0, x1, y1 = C.BBOX
+        (d / "iho.geojson").write_text(json.dumps({"type": "FeatureCollection", "features": [{
+            "type": "Feature", "properties": {"name": "envelope"},
+            "geometry": {"type": "Polygon", "coordinates": [[[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]]]}}]}))
+        got["iho"] = {"layer": "envelope", "features": 1, "names": ["envelope"]}
+    terrs = [(C.EXCLUDED_TERRITORY, "excluded")] if C.EXCLUDED_TERRITORY else []
+    terrs += [(C.TERRITORIES[k], k) for k in C.NATIONAL]
+    for terr, tag in terrs:
         mr("eez", "territory1='%s'" % terr, tag + "_eez")
         mr("eez_12nm", "territory1='%s'" % terr, tag + "_12nm")
         try:
@@ -221,6 +232,76 @@ def step_mml():
                 n += len(feats)
         got[col] = n
     log_step("mml", source=C.MML_API, layers=got, licence="CC BY 4.0 (Maanmittauslaitos, maastotietokanta)")
+
+
+def step_norway():
+    """Norway: Kartverket's depth data (areas, contours, soundings, shoals, rocks, intertidal areas) and the
+    Norwegian Coastal Administration's aids to navigation. Only for regions that list 'no'."""
+    if "no" not in C.NATIONAL:
+        return
+    d = RAW / "norway"
+    shutil.rmtree(d, ignore_errors=True)
+    d.mkdir(parents=True, exist_ok=True)
+    x0, y0, x1, y1 = C.BBOX
+    cw, ch = C.NO_DEPTH_CELL
+    cells = [(x, y, min(x + cw, x1), min(y + ch, y1)) for x in frange(x0, x1, cw) for y in frange(y0, y1, ch)]
+    got = {}
+    # 1. Depth data: GML per layer and cell (the service does not page), converted with ogr2ogr.
+    for layer in C.NO_DEPTH_LAYERS:
+        dest = d / (layer + ".geojsonl")
+        parts = []
+
+        def one(cell, layer=layer):
+            gml = d / ("%s_%07.3f_%07.3f.gml" % (layer, cell[0], cell[1]))
+            url = wfs_url(C.NO_DEPTH_WFS, service="WFS", version="2.0.0", request="GetFeature",
+                          typeNames="app:" + layer,
+                          bbox="%.4f,%.4f,%.4f,%.4f,urn:ogc:def:crs:EPSG::4258" % (cell[1], cell[0], cell[3], cell[2]))
+            http_get(url, gml, tries=4, timeout=900)
+            head = gml.read_bytes()[:400]
+            if b"ExceptionReport" in head:
+                raise RuntimeError("WFS exception for %s: %s" % (url[:200], gml.read_text(errors="replace")[:300]))
+            out = gml.with_suffix(".geojsonl")
+            if b'numberReturned="0"' in gml.read_bytes()[:4000]:
+                out.write_text("")
+                return out
+            run(["ogr2ogr", "-f", "GeoJSONSeq", "-overwrite", "-t_srs", "EPSG:4326", "-lco", "RS=NO", out, gml],
+                env={**os.environ, "GML_SKIP_RESOLVE_ELEMS": "ALL", "GML_EXPOSE_GML_ID": "NO"})
+            return out
+
+        with cf.ThreadPoolExecutor(3) as ex:
+            parts = list(ex.map(one, cells))
+        n = 0
+        with open(dest, "w", encoding="utf-8") as f:
+            for part in parts:
+                if part.exists():
+                    for line in open(part, encoding="utf-8"):
+                        if line.strip():
+                            f.write(line if line.endswith("\n") else line + "\n")
+                            n += 1
+                    part.unlink()
+                part.with_suffix(".gml").unlink(missing_ok=True)
+        got[layer] = n
+    # 2. Aids to navigation: GeoJSON pages of 2000, the whole country (the layers are small), with the
+    #    attributes kept as they come; the build maps them to symbols.
+    for layer in C.NO_AIDS_LAYERS:
+        dest = d / ("aids_" + layer + ".geojsonl")
+        n, start = 0, 0
+        with open(dest, "w", encoding="utf-8") as f:
+            while True:
+                url = wfs_url(C.NO_AIDS_WFS, service="WFS", version="2.0.0", request="GetFeature",
+                              typeNames=C.NO_AIDS_PREFIX + ":" + layer, outputFormat="GEOJSON",
+                              srsName="urn:ogc:def:crs:EPSG::4326", count=2000, startIndex=start)
+                j = json.loads(http_get(url, tries=4, timeout=600))
+                feats = j.get("features", [])
+                for ft in feats:
+                    f.write(json.dumps(ft, ensure_ascii=False, separators=(",", ":")) + "\n")
+                n += len(feats)
+                if len(feats) < 2000:
+                    break
+                start += 2000
+        got["aids_" + layer] = n
+    log_step("norway", depth_source=C.NO_DEPTH_WFS, aids_source=C.NO_AIDS_WFS, layers=got,
+             licence="CC BY 4.0 (Kartverket, Sjøkart - Dybdedata); NLOD 2.0 (Kystverket, navigasjonsinstallasjoner)")
 
 
 def frange(a, b, step):
@@ -343,7 +424,7 @@ def step_osm():
         name, osmfr, geofabrik, box = region
         errors = []
         for src, url in (("openstreetmap.fr", C.OSMFR + osmfr + "-latest.osm.pbf" if osmfr else None),
-                         ("geofabrik", C.GEOFABRIK + geofabrik + "-latest.osm.pbf")):
+                         ("geofabrik", C.GEOFABRIK + geofabrik + "-latest.osm.pbf" if geofabrik else None)):
             if not url:
                 continue
             try:
@@ -473,17 +554,22 @@ def step_land():
 
 STEPS = {"regions": step_regions, "emodnet": step_emodnet, "vayla": step_vayla,
          "traficom": step_traficom, "osm": step_osm, "osm_fallback": step_osm_fallback, "estonia": step_estonia,
-         "germany": step_germany, "land": step_land, "mml": step_mml}
+         "germany": step_germany, "land": step_land, "mml": step_mml, "norway": step_norway}
 
 
 # Optional authority sources: if one fails, the build falls back to OSM in that area and the run goes on.
 OPTIONAL = {"estonia": "estonia", "germany": "germany", "mml": "mml"}
+# National steps that do not apply to the region return at once; the Finnish ones must be skipped by the caller.
+REGIONAL = {"vayla": "fi", "traficom": "fi", "mml": "fi", "estonia": "ee", "germany": "de", "norway": "no"}
 
 
 def main(argv):
     names = argv or list(STEPS)
     for n in names:
         t = time.time()
+        if n in REGIONAL and REGIONAL[n] not in C.NATIONAL:
+            print("[%s] not used in region %s" % (n, C.REGION), flush=True)
+            continue
         try:
             STEPS[n]()
         except Exception as e:  # noqa: BLE001

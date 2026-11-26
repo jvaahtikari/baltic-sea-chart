@@ -47,6 +47,15 @@ SOURCES = [
     {"id": "mml", "name": "Maanmittauslaitos, maastotietokanta (OGC API Features)", "provider": "National Land Survey of Finland",
      "licence": "CC BY 4.0", "licence_url": "https://creativecommons.org/licenses/by/4.0/",
      "attribution": "Maanmittauslaitos", "layers": ["hazard (rocks, Finland)", "danger_area (Finland)"], "step": "mml"},
+    {"id": "kartverket", "name": "Kartverket, Sjøkart - Dybdedata (WFS)", "provider": "Norwegian Mapping Authority",
+     "licence": "CC BY 4.0", "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+     "attribution": "© Kartverket (Sjøkart - Dybdedata). Ikke godkjent for navigasjon.",
+     "layers": ["depth_area (Norway)", "depth_contour (Norway)", "sounding (Norway)", "hazard (rocks, Norway)",
+                "danger_area_depth (Norway)"], "step": "norway"},
+    {"id": "kystverket", "name": "Kystverket, navigasjonsinstallasjoner (WFS)", "provider": "Norwegian Coastal Administration",
+     "licence": "NLOD 2.0", "licence_url": "https://data.norge.no/nlod/no/2.0",
+     "attribution": "© Kystverket (navigasjonsinstallasjoner)",
+     "layers": ["seamark (Norway)", "light (Norway)", "leading_line (Norway)"], "step": "norway"},
     {"id": "emodnet", "name": "EMODnet Bathymetry Digital Terrain Model (WCS, mean depth)",
      "provider": "EMODnet Bathymetry Consortium", "licence": "Open access, attribution required",
      "licence_url": "https://emodnet.ec.europa.eu/en/emodnet-data-policy",
@@ -70,7 +79,10 @@ def sources_with_dates():
     for s in SOURCES:
         s = dict(s)
         s["attribution"] = s["attribution"].replace("{month}", month)
-        logp = C.RAW / s.pop("step") / "log.json"
+        step = s.pop("step")
+        logp = C.RAW / step / "log.json"
+        if not logp.exists() and not (C.RAW / step).exists():
+            continue      # a source that this region does not use
         if logp.exists():
             lg = json.loads(logp.read_text(encoding="utf-8"))
             s["fetched"] = lg.get("fetched")
@@ -88,14 +100,14 @@ def main():
     D.mkdir(parents=True, exist_ok=True)
     srcs = sources_with_dates()
     by = {s["id"]: s for s in srcs}
-    attr_chart = " · ".join(by[k]["attribution"] for k in ("osm", "vayla", "estonia", "germany", "marineregions"))
-    attr_depth = " · ".join(by[k]["attribution"] for k in ("emodnet", "traficom"))
+    attr_chart = " · ".join(by[k]["attribution"] for k in ("osm", "vayla", "estonia", "germany", "kystverket", "marineregions") if k in by)
+    attr_depth = " · ".join(by[k]["attribution"] for k in ("emodnet", "traficom", "kartverket") if k in by)
 
     # style and source list
     for theme, fname in (("light", "style.json"), ("dark", "style-dark.json")):
         (D / fname).write_text(json.dumps(style(attr_chart, attr_depth, theme), ensure_ascii=False, indent=1), encoding="utf-8")
     build = json.loads((C.MID / "build_log.json").read_text()) if (C.MID / "build_log.json").exists() else {}
-    meta = {"name": "Baltic Sea chart", "built": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    meta = {"name": "Baltic Sea chart", "region": C.REGION, "region_title": C.R["title"], "built": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "not_for_navigation": True, "bbox": C.BBOX, "excluded_waters": C.EXCLUDED_TERRITORY,
             "sources": srcs, "features": build.get("features", {}), "tiles_mb": build.get("tiles_mb", {})}
     (D / "sources.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")

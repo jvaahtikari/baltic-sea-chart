@@ -8,18 +8,29 @@ from pathlib import Path
 
 from . import config as C
 
-# Lower limits for a full Baltic build; a much smaller count means a source failed silently.
-MIN_FEATURES = {"land": 1000, "coastline": 1000, "depth_area": 100, "depth_contour": 10000, "depth_fi_area": 50000,
-                "depth_fi_contour": 50000, "seamark": 15000,
-                "light": 2000, "light_sector": 3000, "fairway": 1000, "navline": 5000, "nodata": 1}
+# Lower limits per region; a much smaller count means a source failed silently.
+MIN_FEATURES_BY_REGION = {
+    "baltic": {"land": 1000, "coastline": 1000, "depth_area": 100, "depth_contour": 10000, "depth_nat_area": 50000,
+               "depth_nat_contour": 50000, "seamark": 15000, "light": 2000, "light_sector": 3000, "fairway": 1000,
+               "navline": 5000, "nodata": 1},
+    "norway": {"land": 1000, "coastline": 1000, "depth_area": 100, "depth_contour": 10000, "depth_nat_area": 20000,
+               "depth_nat_contour": 20000, "seamark": 5000, "light": 2000, "sounding": 50000},
+}
+MIN_FEATURES = MIN_FEATURES_BY_REGION.get(C.REGION, {"land": 10, "depth_area": 1, "seamark": 1, "light": 1})
 
 
 # Well-known major lights, one or two per country. If one is missing from the light layer, a source or a
 # filter has dropped it (this caught the Gulf of Riga lighthouses being taken for inland objects).
-KNOWN_LIGHTS = [("Bengtskär (FI)", 21.999, 59.722), ("Landsort (SE)", 17.866, 58.741), ("Keri (EE)", 25.02, 59.70),
-                ("Tahkuna (EE)", 22.587, 59.091), ("Daugavgrīva (LV)", 24.024, 57.060),
-                ("Klaipėda (LT)", 21.093, 55.729), ("Hel (PL)", 18.809, 54.601), ("Arkona (DE)", 13.432, 54.679),
-                ("Kiel lighthouse (DE)", 10.274, 54.500), ("Gedser (DK)", 11.964, 54.559)]
+KNOWN_LIGHTS_BY_REGION = {
+    "baltic": [("Bengtskär (FI)", 21.999, 59.722), ("Landsort (SE)", 17.866, 58.741), ("Keri (EE)", 25.02, 59.70),
+               ("Tahkuna (EE)", 22.587, 59.091), ("Daugavgrīva (LV)", 24.024, 57.060),
+               ("Klaipėda (LT)", 21.093, 55.729), ("Hel (PL)", 18.809, 54.601), ("Arkona (DE)", 13.432, 54.679),
+               ("Kiel lighthouse (DE)", 10.274, 54.500), ("Gedser (DK)", 11.964, 54.559)],
+    "norway": [("Lindesnes", 7.047, 57.983), ("Marstein (Bergen)", 5.011, 60.131), ("Kvitsøy", 5.410, 59.063),
+               ("Sklinna", 10.858, 65.199), ("Nordkapp (Helnes)", 25.974, 71.059)],
+    "probe-norway": [("Marstein (Bergen)", 5.011, 60.131)],
+}
+KNOWN_LIGHTS = KNOWN_LIGHTS_BY_REGION.get(C.REGION, [])
 
 
 def known_lights_missing():
@@ -55,7 +66,7 @@ def main(argv):
             sizes[str(p.relative_to(C.DIST))] = round(mb, 2)
             if mb > C.MAX_FILE_MB:
                 problems.append("%s is %.1f MB (limit %d MB)" % (p.name, mb, C.MAX_FILE_MB))
-    for need in ("land.pmtiles", "coastline.pmtiles", "chart.pmtiles", "depth.pmtiles", "depth-fi.pmtiles", "style.json", "style-dark.json", "sprite.png",
+    for need in ("land.pmtiles", "coastline.pmtiles", "chart.pmtiles", "depth.pmtiles", "depth-national.pmtiles", "style.json", "style-dark.json", "sprite.png",
                  "index.html", "chart-style.js", "sources.json"):
         if need not in sizes:
             problems.append("missing " + need)

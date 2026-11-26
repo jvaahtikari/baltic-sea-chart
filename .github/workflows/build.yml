@@ -2,6 +2,12 @@ name: Build Baltic Sea chart
 
 on:
   workflow_dispatch:
+    inputs:
+      region:
+        description: "Region to build (baltic publishes to Pages; others only report to a run-log-<region> branch)"
+        type: choice
+        default: baltic
+        options: [baltic, norway, probe-norway]
   schedule:
     - cron: "23 3 * * 1,4"      # Monday and Thursday 03:23 UTC: all sources are fetched again from their services
   push:
@@ -14,8 +20,11 @@ permissions:
   id-token: write
 
 concurrency:
-  group: build
+  group: build-${{ inputs.region || 'baltic' }}
   cancel-in-progress: true
+
+env:
+  BSC_REGION: ${{ inputs.region || 'baltic' }}
 
 jobs:
   # A few minutes: every source with a small request, the Estonian and German seamarks fetched in full
@@ -118,7 +127,7 @@ jobs:
         run: |
           mkdir -p work/logs
           pids=()
-          for group in "regions vayla estonia germany" "traficom mml" "emodnet" "land"; do
+          for group in "regions vayla estonia germany" "traficom mml" "norway" "emodnet" "land"; do
             name="${group// /_}"
             /usr/bin/python3 -m pipeline.fetch $group > "work/logs/fetch_$name.log" 2>&1 &
             pids+=("$!:$name")
@@ -180,16 +189,17 @@ jobs:
           for f in work/logs/*.log; do tail -c 60000 "$f" > "$d/log/logs/$(basename "$f")"; done 2>/dev/null || true
           cp work/mid/build_log.json "$d/log/" 2>/dev/null || true
           cp dist/sources.json "$d/log/" 2>/dev/null || true
-          echo "run ${GITHUB_RUN_ID}, commit ${GITHUB_SHA}, $(date -u +%FT%TZ)" > "$d/log/run.txt"
-          cd "$d"; git init -q -b run-log
+          echo "run ${GITHUB_RUN_ID}, commit ${GITHUB_SHA}, region ${BSC_REGION}, $(date -u +%FT%TZ)" > "$d/log/run.txt"
+          br="run-log"; [ "$BSC_REGION" = baltic ] || br="run-log-${BSC_REGION}"
+          cd "$d"; git init -q -b "$br"
           git config user.name "github-actions[bot]"; git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A; git commit -q -m "Run ${GITHUB_RUN_ID}"
+          git add -A; git commit -q -m "Run ${GITHUB_RUN_ID} (${BSC_REGION})"
           git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
           auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
-          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth}" push --force origin run-log
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth}" push --force origin "$br"
 
       - name: Release "latest" (zip of the package)
-        if: steps.check.outcome == 'success'
+        if: steps.check.outcome == 'success' && env.BSC_REGION == 'baltic'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -204,14 +214,22 @@ jobs:
           fi
 
       - name: Upload Pages artifact
-        if: steps.check.outcome == 'success'
+        if: steps.check.outcome == 'success' && env.BSC_REGION == 'baltic'
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
+      - name: Upload the package as a workflow artifact (regions that are not published)
+        if: always() && env.BSC_REGION != 'baltic'
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ env.BSC_REGION }}
+          path: dist
+          retention-days: 7
+
   pages:
     needs: build
-    if: needs.build.outputs.ok == 'true'
+    if: needs.build.outputs.ok == 'true' && (inputs.region || 'baltic') == 'baltic'
     runs-on: ubuntu-24.04
     environment:
       name: github-pages

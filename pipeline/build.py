@@ -40,6 +40,9 @@ def read_geojson(path):
 
 
 def read_seq(path):
+    """One feature per line; a source that this region does not have yields nothing."""
+    if not Path(path).exists():
+        return
     with open(path, encoding="utf-8") as f:
         for line in f:
             line = line.strip().lstrip("\x1e")
@@ -119,22 +122,34 @@ def load_areas():
 def step_areas():
     d = RAW / "regions"
     frame = box(*C.BBOX)
+    def zone(tag):
+        files = sorted(d.glob(tag + "_*.geojson"))
+        if not files:
+            return shapely.Polygon()
+        return unary_union([union_of(read_geojson(p)) for p in files]).intersection(frame)
+
     iho = union_of(read_geojson(d / "iho.geojson")).intersection(frame)
-    excluded = unary_union([union_of(read_geojson(p)) for p in sorted(d.glob("excluded_*.geojson"))]).intersection(frame)
-    fi = unary_union([union_of(read_geojson(p)) for p in sorted(d.glob("fi_*.geojson"))]).intersection(frame)
-    ee = unary_union([union_of(read_geojson(p)) for p in sorted(d.glob("ee_*.geojson"))]).intersection(frame)
-    de = unary_union([union_of(read_geojson(p)) for p in sorted(d.glob("de_*.geojson"))]).intersection(frame)
+    excluded = zone("excluded")
+    fi, ee, de, no = zone("fi"), zone("ee"), zone("de"), zone("no")
     # Simplify before buffering: the buffer is wide, so detail below ~1 km does not matter, and
     # buffering the full-detail coastline takes many minutes.
     aoi = iho.simplify(0.01).buffer(C.AOI_BUFFER_DEG, 4).intersection(frame).difference(excluded)
-    fi_zone = fi.simplify(0.002).buffer(0.005, 4).intersection(aoi)
-    ee_zone = ee.simplify(0.002).buffer(0.005, 4).intersection(aoi).difference(fi_zone) if not ee.is_empty else ee
-    de_zone = de.simplify(0.002).buffer(0.005, 4).intersection(aoi) if not de.is_empty else de
-    areas = {"aoi": aoi, "excluded": excluded, "fi_zone": fi_zone, "ee_zone": ee_zone, "de_zone": de_zone, "iho": iho}
+
+    def tidy(z):
+        return z.simplify(0.002).buffer(0.005, 4).intersection(aoi) if not z.is_empty else z
+
+    fi_zone, no_zone = tidy(fi), tidy(no)
+    ee_zone = tidy(ee).difference(fi_zone) if not ee.is_empty else ee
+    de_zone = tidy(de)
+    # Waters whose depth comes from a national chart database (Traficom, Kartverket) instead of EMODnet
+    nat_zone = unary_union([z for z in (fi_zone, no_zone) if not z.is_empty]) if (not fi_zone.is_empty or not no_zone.is_empty) else shapely.Polygon()
+    areas = {"aoi": aoi, "excluded": excluded, "fi_zone": fi_zone, "ee_zone": ee_zone, "de_zone": de_zone,
+             "no_zone": no_zone, "nat_zone": nat_zone, "iho": iho}
     (MID).mkdir(parents=True, exist_ok=True)
     (MID / "areas.json").write_text(json.dumps({k: shapely.to_wkb(v, hex=True) for k, v in areas.items()}))
     w = Writer("nodata")
-    w.add(excluded, {"reason": "excluded_waters", "territory": C.EXCLUDED_TERRITORY})
+    if not excluded.is_empty:
+        w.add(excluded, {"reason": "excluded_waters", "territory": C.EXCLUDED_TERRITORY})
     w.close()
     LOG["areas_km2"] = {k: round(area_km2(v)) for k, v in areas.items()}
     say("  areas km2:", LOG["areas_km2"])
@@ -243,8 +258,10 @@ class LandIndex:
 # Depth areas and contours
 def step_depth():
     A = load_areas()
-    aoi, fi_zone = A["aoi"], A["fi_zone"]
+    aoi, fi_zone, no_zone, nat_zone = A["aoi"], A["fi_zone"], A["no_zone"], A["nat_zone"]
     shapely.prepare(fi_zone)
+    shapely.prepare(no_zone)
+    shapely.prepare(nat_zone)
     tdir = RAW / "traficom"
     edir = RAW / "emodnet"
     mdir = C.WORK / "depth"
@@ -252,7 +269,7 @@ def step_depth():
 
     t0 = time.time()
     # 1. Finnish depth areas inside Finnish waters (Traficom), and their coverage for masking EMODnet.
-    w_fi_area, w_fi_cnt = Writer("depth_fi_area"), Writer("depth_fi_contour")
+    w_fi_area, w_fi_cnt = Writer("depth_nat_area"), Writer("depth_nat_contour")
     cov_path = mdir / "traficom_cover.geojsonl"
     n_fi = 0
     with open(cov_path, "w", encoding="utf-8") as cov:
@@ -278,21 +295,68 @@ def step_depth():
             continue
         v = num(ft["properties"].get("VALDCO"))
         w_fi_cnt.add(g, {"depth": v, "src": "traficom"}, minzoom=max(FI_DETAIL_ZOOM + 2, contour_minzoom(v)))
-    w_fi_area.close()
-    w_fi_cnt.close()
     LOG["traficom_depth_areas_used"] = n_fi
     # Spot soundings (Sounding_P): the chart's depth figures. Shown from zoom 12; MapLibre thins them by collision.
     w_snd = Writer("sounding")
-    sp = tdir / "Sounding_P.geojsonl"
-    if sp.exists():
-        for ft in read_seq(sp):
-            pt = point_of(ft)
-            d = num(ft["properties"].get("DEPTH"))
-            if pt is None or d is None or d < 0 or not fi_zone.contains(pt):
-                continue
-            w_snd.add(pt, {"d": round(d, 1), "src": "traficom"}, minzoom=12 if d < 20 else 13)
-    w_snd.close()
+    for ft in read_seq(tdir / "Sounding_P.geojsonl"):
+        pt = point_of(ft)
+        d = num(ft["properties"].get("DEPTH"))
+        if pt is None or d is None or d < 0 or not fi_zone.contains(pt):
+            continue
+        w_snd.add(pt, {"d": round(d, 1), "src": "traficom"}, minzoom=12 if d < 20 else 13)
     say("  Traficom done (%.0f s)" % (time.time() - t0))
+
+    # 1b. Norway: Kartverket depth data in Norwegian waters, same layers as Traficom's.
+    nd = RAW / "norway"
+    n_no = 0
+    w_dng = Writer("danger_area_depth")
+    with open(cov_path, "a", encoding="utf-8") as cov:
+        for ft in read_seq(nd / "Dybdeareal.geojsonl"):
+            if not ft.get("geometry"):
+                continue
+            g = shape(ft["geometry"])
+            if g.is_empty or not no_zone.contains(g.representative_point()):
+                continue
+            p = ft["properties"]
+            d1, d2 = num(p.get("minimumsdybde")), num(p.get("maksimumsdybde"))
+            w_fi_area.add(g, {"drval1": d1, "drval2": d2, "src": "kartverket"}, minzoom=FI_DETAIL_ZOOM)
+            cov.write(json.dumps({"type": "Feature", "properties": {}, "geometry": mapping(g)}) + "\n")
+            n_no += 1
+    for ft in read_seq(nd / "Dybdekurve.geojsonl"):
+        if not ft.get("geometry"):
+            continue
+        g = shape(ft["geometry"])
+        if g.is_empty or not no_zone.contains(g.representative_point()):
+            continue
+        v = num(ft["properties"].get("dybde"))
+        w_fi_cnt.add(g, {"depth": v, "src": "kartverket"}, minzoom=max(FI_DETAIL_ZOOM + 2, contour_minzoom(v)))
+    for ft in read_seq(nd / "Dybdepunkt.geojsonl"):
+        pt = point_of(ft)
+        d = num(ft["properties"].get("dybde"))
+        if pt is None or d is None or d < 0 or not no_zone.contains(pt):
+            continue
+        w_snd.add(pt, {"d": round(d, 1), "src": "kartverket"}, minzoom=12 if d < 20 else 13)
+    # Grunne: a shoal with its least depth, shown as a sounding flagged as a danger
+    for ft in read_seq(nd / "Grunne.geojsonl"):
+        pt = point_of(ft)
+        d = num(ft["properties"].get("dybde"))
+        if pt is None or d is None or not no_zone.contains(pt):
+            continue
+        w_snd.add(pt, {"d": round(d, 1), "shoal": 1, "src": "kartverket"}, minzoom=12)
+    # Tørrfall: intertidal area (dries)
+    for ft in read_seq(nd / "Tørrfall.geojsonl"):
+        if not ft.get("geometry"):
+            continue
+        g = shape(ft["geometry"])
+        if g.is_empty or g.geom_type not in ("Polygon", "MultiPolygon") or not no_zone.contains(g.representative_point()):
+            continue
+        w_dng.add(g, {"kind": "intertidal", "src": "kartverket"}, minzoom=11)
+    w_dng.close()
+    w_fi_area.close()
+    w_fi_cnt.close()
+    w_snd.close()
+    LOG["kartverket_depth_areas_used"] = n_no
+    say("  Kartverket done (%.0f s)" % (time.time() - t0))
 
     # 2. EMODnet grid: depth in metres, masked to the area of interest minus Finnish coverage.
     vrt = mdir / "emodnet.vrt"
@@ -326,7 +390,10 @@ def step_depth():
         return ds.GetRasterBand(1).ReadAsArray().astype(bool)
 
     in_aoi = burn(aoi)
-    fi_cov = burn(cov_path, all_touched=True) & burn(fi_zone, all_touched=True)
+    if cov_path.stat().st_size > 0 and not nat_zone.is_empty:
+        fi_cov = burn(cov_path, all_touched=True) & burn(nat_zone, all_touched=True)
+    else:
+        fi_cov = np.zeros((H, W), dtype=bool)
     sea = np.isfinite(arr) & in_aoi
     # Sign: EMODnet stores elevation (negative below sea level). Detect rather than assume.
     sample = arr[sea]
@@ -640,9 +707,11 @@ def osm_range(tags):
 
 def step_marks():
     A = load_areas()
-    aoi, fi_zone = A["aoi"], A["fi_zone"]
+    aoi, fi_zone, no_zone = A["aoi"], A["fi_zone"], A["no_zone"]
     shapely.prepare(aoi)
     shapely.prepare(fi_zone)
+    shapely.prepare(no_zone)
+    use_no = (RAW / "norway" / "aids_Lys.geojsonl").exists() and not no_zone.is_empty
     land = LandIndex()
     w_mark, w_light, w_sect, w_haz = Writer("seamark"), Writer("light"), Writer("light_sector"), Writer("hazard")
     vd = RAW / "vayla"
@@ -821,7 +890,7 @@ def step_marks():
         lit, label, cols, secs = osm_lights(tags)
         if kind is None and not lit:
             continue
-        if fi_zone.contains(pt) or (use_de and de_zone.contains(pt)) or not ok(lon, lat):
+        if fi_zone.contains(pt) or (use_de and de_zone.contains(pt)) or (use_no and no_zone.contains(pt)) or not ok(lon, lat):
             continue
         if kind is not None and not (use_ee and ee_zone.contains(pt)):
             w_mark.add(pt, {"kind": kind, "cat": osm_category(t, tags), "name": name,
@@ -838,6 +907,62 @@ def step_marks():
                              "height": num(tags.get("seamark:light:height")), "range": rng,
                              "major": major, "src": "osm"}, minzoom=8 if major else 10)
             add_sectors(w_sect, lon, lat, secs, "osm")
+
+    # --- Norway: Kystverket aids to navigation. The attribute vocabulary is logged (top values per field)
+    #     so that the symbol mapping below can be completed from real data.
+    if use_no:
+        from collections import Counter
+        nd = RAW / "norway"
+        vocab = {}
+
+        def note(layer, p, fields):
+            for f in fields:
+                vocab.setdefault(layer + "." + f, Counter())[str(p.get(f))] += 1
+
+        n_no = {"light": 0, "mark": 0, "skipped": 0}
+        for ft in read_seq(nd / "aids_Lys.geojsonl"):
+            pt = point_of(ft)
+            p = ft["properties"]
+            if pt is None or not no_zone.contains(pt) or not ok(pt.x, pt.y):
+                n_no["skipped"] += 1
+                continue
+            note("Lys", p, ("klasse", "kategori", "funksjon", "nautisk_funksjon", "lys_type", "lys_farge", "lys_karakter",
+                            "karakter", "periode", "landemerke_type", "fundament_type", "nfs_status", "type_id"))
+            cols = [c for c in "WRGY" if (num(p.get({"W": "rekkevidde_hvit", "R": "rekkevidde_rod", "G": "rekkevidde_gronn",
+                                                     "Y": "rekkevidde_gul"}[c])) or 0) > 0]
+            label = p.get("lys_karakter") or p.get("karakter") or None
+            w_light.add(pt, {"label": label, "colour": "".join(cols) or "W", "height": num(p.get("lys_hoyde")),
+                             "range": max([num(p.get(k)) or 0 for k in ("rekkevidde_hvit", "rekkevidde_rod",
+                                                                        "rekkevidde_gronn", "rekkevidde_gul")]) or None,
+                             "name": p.get("navn"), "src": "kystverket"}, minzoom=10)
+            kind = no_kind(p)
+            if kind:
+                w_mark.add(pt, {"kind": kind, "cat": no_category(p), "name": p.get("navn"), "lit": True,
+                                "src": "kystverket"}, minzoom=mark_minzoom(kind))
+            n_no["light"] += 1
+        for layer in ("Fast_sjømerke", "Flytende_merke"):
+            for ft in read_seq(nd / ("aids_" + layer + ".geojsonl")):
+                pt = point_of(ft)
+                p = ft["properties"]
+                if pt is None or not no_zone.contains(pt) or not ok(pt.x, pt.y):
+                    n_no["skipped"] += 1
+                    continue
+                note(layer, p, tuple(k for k in p if k not in ("GmlID", "objectid", "globalid", "navn", "sted",
+                                                                  "beliggenhet", "opprettet_av", "opprettet_dato",
+                                                                  "oppdatert_av", "oppdatert_dato", "gis_obj_id",
+                                                                  "sjomerke_nr", "nav_id", "beskrivelse")))
+                kind = no_kind(p) or ("buoy" if layer == "Flytende_merke" else "beacon")
+                w_mark.add(pt, {"kind": kind, "cat": no_category(p), "name": p.get("navn"), "lit": False,
+                                "src": "kystverket"}, minzoom=mark_minzoom(kind))
+                n_no["mark"] += 1
+        for layer in ("Sektorlinje", "Sektorflate", "Racon", "IB", "Overettlinje_lys", "Overettlinje_merke"):
+            for i, ft in enumerate(read_seq(nd / ("aids_" + layer + ".geojsonl"))):
+                if i >= 2:
+                    break
+                vocab[layer + ".sample%d" % i] = {str(k): str(v)[:80] for k, v in ft["properties"].items()}
+                vocab[layer + ".geometry"] = {ft.get("geometry", {}).get("type", "?"): 1}
+        LOG["norway_marks"] = n_no
+        LOG["norway_vocab"] = {k: (dict(v.most_common(25)) if hasattr(v, "most_common") else v) for k, v in vocab.items()}
 
     # --- Finland: rocks, rocky areas and shoals of the MML topographic database (optional source)
     w_dng = Writer("danger_area")
@@ -864,6 +989,15 @@ def step_marks():
             w_dng.add(g, {"kind": "rocks" if col == "vesikivikko" else "shoal", "src": "mml"}, minzoom=12)
             n_mml += 1
     LOG["mml_features"] = n_mml
+    # --- Norway: Skjær (rocks awash / drying) from Kartverket
+    n_sk = 0
+    for ft in read_seq(RAW / "norway" / "Skjær.geojsonl"):
+        pt = point_of(ft)
+        if pt is None or not no_zone.contains(pt):
+            continue
+        w_haz.add(pt, {"kind": "rock", "water_level": "awash", "src": "kartverket"}, minzoom=12)
+        n_sk += 1
+    LOG["kartverket_rocks"] = n_sk
     for w in (w_mark, w_light, w_sect, w_haz, w_dng):
         w.close()
     LOG["marks_dropped"] = dropped
@@ -977,6 +1111,36 @@ def estonian_mark(name, layer):
     return kind, cat
 
 
+# Kystverket attribute vocabulary -> symbol kind. Provisional: the probe run logs the real values
+# (build_log.json: norway_vocab) and this table is completed from them.
+NO_KINDS = [
+    ("fyr", "lighthouse"), ("lykt", "light"), ("hib", "light"), ("lanterne", "light"), ("stake", "spar"),
+    ("stang", "spar"), ("bøye", "buoy"), ("boye", "buoy"), ("lysbøye", "buoy"), ("varde", "cairn"),
+    ("båke", "beacon"), ("bake", "beacon"), ("jernstang", "spar"), ("jernsøyle", "beacon"), ("overett", "leading_mark"),
+    ("stolpe", "beacon"), ("tavle", "daymark"),
+]
+
+
+def no_kind(p):
+    text = " ".join(str(p.get(k) or "") for k in ("klasse", "kategori", "funksjon", "nautisk_funksjon", "lys_type",
+                                                   "type_id", "landemerke_type", "sjomerke_type", "merketype")).lower()
+    for key, kind in NO_KINDS:
+        if key in text:
+            return kind
+    return None
+
+
+def no_category(p):
+    """IALA category (lateral/cardinal) when the attributes say it; otherwise None."""
+    text = " ".join(str(p.get(k) or "") for k in p).lower()
+    for key, cat in (("babord", "port"), ("styrbord", "starboard"), ("nord", "north"), ("sør", "south"), ("sor", "south"),
+                     ("øst", "east"), ("ost", "east"), ("vest", "west"), ("midtgrunn", "isolated_danger"),
+                     ("sikkert farvann", "safe_water"), ("spesial", "special")):
+        if key in text:
+            return cat
+    return None
+
+
 def mark_minzoom(kind):
     return {"lighthouse": 8, "daymark": 9, "light": 10, "racon": 10, "leading_mark": 11, "cairn": 11}.get(kind, 11)
 
@@ -990,9 +1154,10 @@ def vayla_name(s):
 
 def step_routes():
     A = load_areas()
-    aoi, fi_zone = A["aoi"], A["fi_zone"]
+    aoi, fi_zone, no_zone = A["aoi"], A["fi_zone"], A["no_zone"]
     shapely.prepare(aoi)
     shapely.prepare(fi_zone)
+    shapely.prepare(no_zone)
     vd = RAW / "vayla"
     w_fw, w_nav, w_lead, w_tss = Writer("fairway"), Writer("navline"), Writer("leading_line"), Writer("tss")
 
@@ -1059,6 +1224,18 @@ def step_routes():
             w_nav.add(g, {"bearing": num(tags.get("seamark:%s:orientation" % t)), "kind": t,
                           "depth": num(tags.get("seamark:%s:depth" % t) or tags.get("seamark:%s:minimum_depth" % t)),
                           "name": tags.get("seamark:name") or tags.get("name"), "src": "osm"}, minzoom=10)
+    # Norway: leading lines (overettlinjer) of Kystverket
+    n_ol = 0
+    for layer in ("Overettlinje_lys", "Overettlinje_merke"):
+        for ft in read_seq(RAW / "norway" / ("aids_" + layer + ".geojsonl")):
+            g = shape(ft["geometry"]) if ft.get("geometry") else None
+            if g is None or g.is_empty or g.geom_type not in ("LineString", "MultiLineString"):
+                continue
+            if not no_zone.contains(g.representative_point()):
+                continue
+            w_lead.add(g, {"bearing": None, "src": "kystverket"}, minzoom=10)
+            n_ol += 1
+    LOG["kystverket_leading_lines"] = n_ol
     for w in (w_fw, w_nav, w_lead, w_tss):
         w.close()
 
@@ -1094,13 +1271,14 @@ def step_tiles():
           ["--detect-shared-borders", "--no-tile-size-limit"])
     tiles("coastline.pmtiles", "Baltic Sea chart: coastline", 13, ["coastline"], ["--no-tile-size-limit"])
     tiles("chart.pmtiles", "Baltic Sea chart: seamarks and routes", 15,
-          ["nodata", "seamark", "light", "light_sector", "hazard", "danger_area", "sounding", "fairway", "navline",
-           "leading_line", "tss"], ["--no-tile-size-limit", "--no-feature-limit"], optional=("sounding",))
+          ["nodata", "seamark", "light", "light_sector", "hazard", "danger_area", "danger_area_depth", "sounding",
+           "fairway", "navline", "leading_line", "tss"], ["--no-tile-size-limit", "--no-feature-limit"],
+          optional=("sounding",))
     tiles("depth.pmtiles", "Baltic Sea chart: depth (EMODnet)", 12, ["depth_area", "depth_contour"],
           ["--detect-shared-borders", "--no-tile-size-limit"], simp=4)
-    tiles("depth-fi.pmtiles", "Baltic Sea chart: depth in Finnish waters (Traficom)", 12,
-          ["depth_fi_area", "depth_fi_contour"], ["--detect-shared-borders", "--no-tile-size-limit"],
-          optional=("depth_fi_contour",), simp=4)
+    tiles("depth-national.pmtiles", "Baltic Sea chart: depth in Finnish waters (Traficom)", 12,
+          ["depth_nat_area", "depth_nat_contour"], ["--detect-shared-borders", "--no-tile-size-limit"],
+          optional=("depth_nat_contour",), simp=4)
     say("  tiles MB:", LOG["tiles_mb"])
 
 

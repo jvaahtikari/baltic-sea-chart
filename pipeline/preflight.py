@@ -64,12 +64,20 @@ def main():
     # --- required sources: a failure here stops the run ------------------------------------
     @check("Marine Regions", "IHO areas (one request)")
     def _():
+        if C.IHO_MRGIDS:
+            cql = "mrgid IN (%s)" % ",".join(map(str, C.IHO_MRGIDS))
+        elif C.IHO_NAMES:
+            cql = "name IN (%s)" % ",".join("'%s'" % n.replace("'", "''") for n in C.IHO_NAMES)
+        else:
+            return "envelope used as the area (region %s)" % C.REGION
         j = F.wfs_json(C.MR_WFS, service="WFS", version="1.0.0", request="GetFeature",
-                       typeName="MarineRegions:iho", outputFormat="application/json",
-                       CQL_FILTER="mrgid IN (%s)" % ",".join(map(str, C.IHO_MRGIDS)))
+                       typeName="MarineRegions:iho", outputFormat="application/json", CQL_FILTER=cql)
         if not j["features"]:
             raise RuntimeError("no IHO areas")
-        return "%d areas" % len(j["features"])
+        names = sorted(str(f["properties"].get("name")) for f in j["features"])
+        if C.IHO_NAMES and len(names) < len(C.IHO_NAMES):
+            raise RuntimeError("only %s found of %s" % (names, C.IHO_NAMES))
+        return "%d areas: %s" % (len(j["features"]), ", ".join(names))
 
     @check("EMODnet", "WCS capabilities")
     def _():
@@ -79,10 +87,26 @@ def main():
             raise RuntimeError("coverage %s not listed" % C.EMODNET_COVERAGE)
         return "coverage listed"
 
-    for tn in F.VAYLA_LAYERS:
-        check("Väylä", tn)(lambda tn=tn: "%d features" % hits(C.VAYLA_WFS, "vesivaylatiedot:" + tn))
-    for tn in F.TRAFICOM_LAYERS:
-        check("Traficom", tn)(lambda tn=tn: "%d features" % hits(C.TRAFICOM_WFS, "rajoitettu:" + tn))
+    if "fi" in C.NATIONAL:
+        for tn in F.VAYLA_LAYERS:
+            check("Väylä", tn)(lambda tn=tn: "%d features" % hits(C.VAYLA_WFS, "vesivaylatiedot:" + tn))
+        for tn in F.TRAFICOM_LAYERS:
+            check("Traficom", tn)(lambda tn=tn: "%d features" % hits(C.TRAFICOM_WFS, "rajoitettu:" + tn))
+    if "no" in C.NATIONAL:
+        for tn in C.NO_AIDS_LAYERS:
+            check("Kystverket", tn)(lambda tn=tn: "%d features" % hits(C.NO_AIDS_WFS, C.NO_AIDS_PREFIX + ":" + tn))
+
+        @check("Kartverket", "Dybdeareal, one small window")
+        def _():
+            url = F.wfs_url(C.NO_DEPTH_WFS, service="WFS", version="2.0.0", request="GetFeature",
+                            typeNames="app:Dybdeareal", bbox="60.10,5.00,60.15,5.10,urn:ogc:def:crs:EPSG::4258")
+            txt = F.http_get(url, tries=2, timeout=300).decode("utf-8", "replace")
+            if "ExceptionReport" in txt[:2000]:
+                raise RuntimeError(txt[:300])
+            n = txt.count("<app:Dybdeareal")
+            if n == 0:
+                raise RuntimeError("no features in the window (axis order?): %s" % txt[:300])
+            return "%d features, %d kB" % (n, len(txt) // 1000)
     check("osmdata", "land polygons")(lambda: head(C.OSMDATA + "land-polygons-complete-4326.zip"))
 
     # --- authority seamarks: fetched in full and parsed with the build's own functions -----
@@ -90,6 +114,8 @@ def main():
 
     @check("Estonia", "fetch + parse", required=False)
     def _():
+        if "ee" not in C.NATIONAL:
+            return "not used in region " + C.REGION
         F.step_estonia()
         kinds = collections.Counter()
         for layer in ("Beacon", "Buoy"):
@@ -106,6 +132,8 @@ def main():
 
     @check("Germany (BSH)", "fetch + parse", required=False)
     def _():
+        if "de" not in C.NATIONAL:
+            return "not used in region " + C.REGION
         F.step_germany()
         kinds, labels = collections.Counter(), []
         gd = C.RAW / "germany"
