@@ -931,10 +931,12 @@ def step_marks():
             cols = [c for c in "WRGY" if (num(p.get({"W": "rekkevidde_hvit", "R": "rekkevidde_rod", "G": "rekkevidde_gronn",
                                                      "Y": "rekkevidde_gul"}[c])) or 0) > 0]
             label = p.get("lys_karakter") or p.get("karakter") or None
+            rng = max([num(p.get(k)) or 0 for k in ("rekkevidde_hvit", "rekkevidde_rod", "rekkevidde_gronn",
+                                                   "rekkevidde_gul")]) or None
+            major = bool((rng or 0) >= 15 or "fyr" in str(p.get("klasse") or "").lower())
             w_light.add(pt, {"label": label, "colour": "".join(cols) or "W", "height": num(p.get("lys_hoyde")),
-                             "range": max([num(p.get(k)) or 0 for k in ("rekkevidde_hvit", "rekkevidde_rod",
-                                                                        "rekkevidde_gronn", "rekkevidde_gul")]) or None,
-                             "name": p.get("navn"), "src": "kystverket"}, minzoom=10)
+                             "range": rng, "major": major, "name": p.get("navn"), "src": "kystverket"},
+                        minzoom=8 if major else 10)
             kind = no_kind(p)
             if kind:
                 w_mark.add(pt, {"kind": kind, "cat": no_category(p), "name": p.get("navn"), "lit": True,

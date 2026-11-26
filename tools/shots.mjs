@@ -28,7 +28,7 @@ fs.mkdirSync(out, { recursive: true });
 const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || undefined, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1000, height: 700 } });
 const errors = [];
-page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+page.on('console', m => { if (m.type() === 'error') errors.push(m.text() + ' @ ' + ((m.location() || {}).url || '')); });
 page.on('pageerror', e => errors.push(String(e)));
 const result = [];
 const DARK = ['overview', 'helsinki', 'stockholm', 'gdansk', 'bergen', 'bergen_detail'];
