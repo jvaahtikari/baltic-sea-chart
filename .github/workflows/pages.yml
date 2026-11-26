@@ -41,14 +41,10 @@ jobs:
             echo "== $br -> packages/$region"
             git fetch --depth 1 origin "$br"
             mkdir -p "dist/packages/$region"
-            git --work-tree="dist/packages/$region" checkout FETCH_HEAD -- .
-            git reset -q
-            # fonts and the map libraries are shared with the main package
-            rm -rf "dist/packages/$region/fonts" "dist/packages/$region/lib"
-            ln -s ../../fonts "dist/packages/$region/fonts" 2>/dev/null || true
+            git archive FETCH_HEAD | tar -x -C "dist/packages/$region"
+            # the probe branch carries no fonts: the glyphs of the main package serve it
+            rm -rf "dist/packages/$region/fonts"; cp -r dist/fonts "dist/packages/$region/fonts"
           done
-          # Pages does not follow symlinks: copy the fonts instead
-          for d in dist/packages/*/; do rm -f "$d/fonts"; cp -r dist/fonts "$d/fonts"; done 2>/dev/null || true
           du -sh dist dist/packages/* 2>/dev/null || true
       - uses: actions/upload-pages-artifact@v3
         with:
