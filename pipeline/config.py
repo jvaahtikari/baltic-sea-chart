@@ -60,7 +60,8 @@ REGIONS = {
         "iho_names": None,
         "excluded": None,
         "national": ["no"],
-        "osm": [("bergen", None, None, (4.6, 59.8, 5.9, 60.6))],
+        # the Norway extract, not Overpass: the public Overpass servers answer 502 for minutes at a time
+        "osm": [("norway", "europe/norway", "europe/norway", (4.6, 59.8, 5.9, 60.6))],
     },
 }
 REGION = os.environ.get("BSC_REGION", "baltic").strip() or "baltic"

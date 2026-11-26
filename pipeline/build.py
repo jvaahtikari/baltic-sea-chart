@@ -309,7 +309,7 @@ def step_depth():
         d = num(ft["properties"].get("DEPTH"))
         if pt is None or d is None or d < 0 or not fi_zone.contains(pt):
             continue
-        w_snd.add(pt, {"d": round(d, 1), "src": "traficom"}, minzoom=12 if d < 20 else 13)
+        w_snd.add(pt, {"d": sounding_value(d), "src": "traficom"}, minzoom=12 if d < 20 else 13)
     say("  Traficom done (%.0f s)" % (time.time() - t0))
 
     # 1b. Norway: Kartverket depth data in Norwegian waters, same layers as Traficom's.
@@ -341,14 +341,14 @@ def step_depth():
         d = num(prop_ci(ft["properties"], "dybde"))
         if pt is None or d is None or d < 0 or not no_zone.contains(pt):
             continue
-        w_snd.add(pt, {"d": round(d, 1), "src": "kartverket"}, minzoom=12 if d < 20 else 13)
+        w_snd.add(pt, {"d": sounding_value(d), "src": "kartverket"}, minzoom=12 if d < 20 else 13)
     # Grunne: a shoal with its least depth, shown as a sounding flagged as a danger
     for ft in read_seq(nd / "Grunne.geojsonl"):
         pt = point_of(ft)
         d = num(prop_ci(ft["properties"], "dybde"))
         if pt is None or d is None or not no_zone.contains(pt):
             continue
-        w_snd.add(pt, {"d": round(d, 1), "shoal": 1, "src": "kartverket"}, minzoom=12)
+        w_snd.add(pt, {"d": sounding_value(d), "shoal": 1, "src": "kartverket"}, minzoom=12)
     # Tørrfall: intertidal area (dries)
     for ft in read_seq(nd / "Tørrfall.geojsonl"):
         if not ft.get("geometry"):
@@ -1018,6 +1018,12 @@ def step_marks():
     for w in (w_mark, w_light, w_sect, w_haz, w_dng):
         w.close()
     LOG["marks_dropped"] = dropped
+
+
+def sounding_value(d):
+    """Depth figure as on the chart: a decimal below 31 m, whole metres from there on (also rounds away
+    MapLibre's number-format quirk with max-fraction-digits 0)."""
+    return round(d, 1) if d < 31 else int(round(d))
 
 
 def prop_ci(p, name):
