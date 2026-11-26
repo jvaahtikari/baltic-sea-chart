@@ -1,0 +1,123 @@
+{
+ "name": "Baltic Sea chart",
+ "region": "probe-norway",
+ "region_title": "Probe: Bergen",
+ "built": "2026-11-26T22:11:44Z",
+ "not_for_navigation": true,
+ "bbox": [
+  4.6,
+  59.8,
+  5.9,
+  60.6
+ ],
+ "excluded_waters": null,
+ "sources": [
+  {
+   "id": "osm",
+   "name": "OpenStreetMap (OpenSeaMap seamark tagging) and OSM land polygons",
+   "provider": "OpenStreetMap contributors; land polygons by osmdata.openstreetmap.de",
+   "licence": "ODbL 1.0",
+   "licence_url": "https://opendatacommons.org/licenses/odbl/1-0/",
+   "attribution": "© OpenStreetMap contributors",
+   "layers": [
+    "land",
+    "coastline",
+    "seamark (outside Finland)",
+    "light (outside Finland)",
+    "light_sector (outside Finland)",
+    "hazard",
+    "fairway/navline (outside Finland)",
+    "tss"
+   ],
+   "fetched": "2026-11-26T22:08:10Z",
+   "endpoint": "openstreetmap.fr / Geofabrik / Overpass, per region"
+  },
+  {
+   "id": "kartverket",
+   "name": "Kartverket, Sjøkart - Dybdedata (WFS)",
+   "provider": "Norwegian Mapping Authority",
+   "licence": "CC BY 4.0",
+   "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+   "attribution": "© Kartverket (Sjøkart - Dybdedata). Ikke godkjent for navigasjon.",
+   "layers": [
+    "depth_area (Norway)",
+    "depth_contour (Norway)",
+    "sounding (Norway)",
+    "hazard (rocks, Norway)",
+    "danger_area_depth (Norway)"
+   ],
+   "fetched": "2026-11-26T22:09:20Z",
+   "endpoint": null
+  },
+  {
+   "id": "kystverket",
+   "name": "Kystverket, navigasjonsinstallasjoner (WFS)",
+   "provider": "Norwegian Coastal Administration",
+   "licence": "NLOD 2.0",
+   "licence_url": "https://data.norge.no/nlod/no/2.0",
+   "attribution": "© Kystverket (navigasjonsinstallasjoner)",
+   "layers": [
+    "seamark (Norway)",
+    "light (Norway)",
+    "leading_line (Norway)"
+   ],
+   "fetched": "2026-11-26T22:09:20Z",
+   "endpoint": null
+  },
+  {
+   "id": "emodnet",
+   "name": "EMODnet Bathymetry Digital Terrain Model (WCS, mean depth)",
+   "provider": "EMODnet Bathymetry Consortium",
+   "licence": "Open access, attribution required",
+   "licence_url": "https://emodnet.ec.europa.eu/en/emodnet-data-policy",
+   "attribution": "EMODnet Bathymetry Consortium: EMODnet Digital Bathymetry (DTM)",
+   "layers": [
+    "depth_area (outside Finland)",
+    "depth_contour (outside Finland)"
+   ],
+   "fetched": "2026-11-26T22:06:59Z",
+   "endpoint": "https://ows.emodnet-bathymetry.eu/wcs"
+  },
+  {
+   "id": "marineregions",
+   "name": "Marine Regions: IHO sea areas and maritime boundaries (WFS)",
+   "provider": "Flanders Marine Institute (VLIZ)",
+   "licence": "CC BY 4.0",
+   "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+   "attribution": "Marine Regions (VLIZ)",
+   "layers": [
+    "nodata",
+    "area of the package"
+   ],
+   "fetched": "2026-11-26T22:06:47Z",
+   "endpoint": "https://geo.vliz.be/geoserver/MarineRegions/wfs"
+  }
+ ],
+ "features": {
+  "nodata": 0,
+  "land": 6486,
+  "coastline": 5326,
+  "danger_area_depth": 13783,
+  "depth_nat_area": 21729,
+  "depth_nat_contour": 34440,
+  "sounding": 155101,
+  "depth_area": 20,
+  "depth_contour": 11017,
+  "seamark": 1281,
+  "light": 437,
+  "light_sector": 6327,
+  "hazard": 1181,
+  "danger_area": 0,
+  "fairway": 0,
+  "navline": 2,
+  "leading_line": 4,
+  "tss": 2
+ },
+ "tiles_mb": {
+  "land.pmtiles": 1.9,
+  "coastline.pmtiles": 1.8,
+  "chart.pmtiles": 12.5,
+  "depth.pmtiles": 2.2,
+  "depth-national.pmtiles": 8.6
+ }
+}
