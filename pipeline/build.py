@@ -318,7 +318,7 @@ def step_depth():
             if g.is_empty or not no_zone.contains(g.representative_point()):
                 continue
             p = ft["properties"]
-            d1, d2 = num(p.get("minimumsdybde")), num(p.get("maksimumsdybde"))
+            d1, d2 = num(prop_ci(p, "minimumsdybde")), num(prop_ci(p, "maksimumsdybde"))
             w_fi_area.add(g, {"drval1": d1, "drval2": d2, "src": "kartverket"}, minzoom=FI_DETAIL_ZOOM)
             cov.write(json.dumps({"type": "Feature", "properties": {}, "geometry": mapping(g)}) + "\n")
             n_no += 1
@@ -328,18 +328,18 @@ def step_depth():
         g = shape(ft["geometry"])
         if g.is_empty or not no_zone.contains(g.representative_point()):
             continue
-        v = num(ft["properties"].get("dybde"))
+        v = num(prop_ci(ft["properties"], "dybde"))
         w_fi_cnt.add(g, {"depth": v, "src": "kartverket"}, minzoom=max(FI_DETAIL_ZOOM + 2, contour_minzoom(v)))
     for ft in read_seq(nd / "Dybdepunkt.geojsonl"):
         pt = point_of(ft)
-        d = num(ft["properties"].get("dybde"))
+        d = num(prop_ci(ft["properties"], "dybde"))
         if pt is None or d is None or d < 0 or not no_zone.contains(pt):
             continue
         w_snd.add(pt, {"d": round(d, 1), "src": "kartverket"}, minzoom=12 if d < 20 else 13)
     # Grunne: a shoal with its least depth, shown as a sounding flagged as a danger
     for ft in read_seq(nd / "Grunne.geojsonl"):
         pt = point_of(ft)
-        d = num(ft["properties"].get("dybde"))
+        d = num(prop_ci(ft["properties"], "dybde"))
         if pt is None or d is None or not no_zone.contains(pt):
             continue
         w_snd.add(pt, {"d": round(d, 1), "shoal": 1, "src": "kartverket"}, minzoom=12)
@@ -1001,6 +1001,17 @@ def step_marks():
     for w in (w_mark, w_light, w_sect, w_haz, w_dng):
         w.close()
     LOG["marks_dropped"] = dropped
+
+
+def prop_ci(p, name):
+    """Property by name, case-insensitively (FGDB and GML spell the Norwegian fields differently)."""
+    if name in p:
+        return p[name]
+    low = name.lower()
+    for k, v in p.items():
+        if k.lower() == low:
+            return v
+    return None
 
 
 def point_of(ft):

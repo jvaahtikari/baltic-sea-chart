@@ -96,17 +96,8 @@ def main():
         for tn in C.NO_AIDS_LAYERS:
             check("Kystverket", tn)(lambda tn=tn: "%d features" % hits(C.NO_AIDS_WFS, C.NO_AIDS_PREFIX + ":" + tn))
 
-        @check("Kartverket", "Dybdeareal, one small window")
-        def _():
-            url = F.wfs_url(C.NO_DEPTH_WFS, service="WFS", version="2.0.0", request="GetFeature",
-                            typeNames="app:Dybdeareal", bbox="60.10,5.00,60.15,5.10,urn:ogc:def:crs:EPSG::4258")
-            txt = F.http_get(url, tries=2, timeout=300).decode("utf-8", "replace")
-            if "ExceptionReport" in txt[:2000]:
-                raise RuntimeError(txt[:300])
-            n = txt.count("<app:Dybdeareal")
-            if n == 0:
-                raise RuntimeError("no features in the window (axis order?): %s" % txt[:300])
-            return "%d features, %d kB" % (n, len(txt) // 1000)
+        check("Kartverket", "Dybdedata FGDB download")(
+            lambda: head(C.NO_DEPTH_ZIP.get(C.REGION) or C.NO_DEPTH_ZIP["norway"]))
     check("osmdata", "land polygons")(lambda: head(C.OSMDATA + "land-polygons-complete-4326.zip"))
 
     # --- authority seamarks: fetched in full and parsed with the build's own functions -----
@@ -166,7 +157,7 @@ def main():
         def region(osmfr=osmfr, geofabrik=geofabrik):
             tried = []
             for src, url in (("openstreetmap.fr", C.OSMFR + osmfr + "-latest.osm.pbf" if osmfr else None),
-                             ("geofabrik", C.GEOFABRIK + geofabrik + "-latest.osm.pbf")):
+                             ("geofabrik", C.GEOFABRIK + geofabrik + "-latest.osm.pbf" if geofabrik else None)):
                 if not url:
                     continue
                 try:

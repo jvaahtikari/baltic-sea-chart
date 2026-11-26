@@ -243,44 +243,31 @@ def step_norway():
     shutil.rmtree(d, ignore_errors=True)
     d.mkdir(parents=True, exist_ok=True)
     x0, y0, x1, y1 = C.BBOX
-    cw, ch = C.NO_DEPTH_CELL
-    cells = [(x, y, min(x + cw, x1), min(y + ch, y1)) for x in frange(x0, x1, cw) for y in frange(y0, y1, ch)]
     got = {}
-    # 1. Depth data: GML per layer and cell (the service does not page), converted with ogr2ogr.
-    for layer in C.NO_DEPTH_LAYERS:
-        dest = d / (layer + ".geojsonl")
-        parts = []
-
-        def one(cell, layer=layer):
-            gml = d / ("%s_%07.3f_%07.3f.gml" % (layer, cell[0], cell[1]))
-            url = wfs_url(C.NO_DEPTH_WFS, service="WFS", version="2.0.0", request="GetFeature",
-                          typeNames="app:" + layer,
-                          bbox="%.4f,%.4f,%.4f,%.4f,urn:ogc:def:crs:EPSG::4258" % (cell[1], cell[0], cell[3], cell[2]))
-            http_get(url, gml, tries=4, timeout=900)
-            head = gml.read_bytes()[:400]
-            if b"ExceptionReport" in head:
-                raise RuntimeError("WFS exception for %s: %s" % (url[:200], gml.read_text(errors="replace")[:300]))
-            out = gml.with_suffix(".geojsonl")
-            if b'numberReturned="0"' in gml.read_bytes()[:4000]:
-                out.write_text("")
-                return out
-            run(["ogr2ogr", "-f", "GeoJSONSeq", "-overwrite", "-t_srs", "EPSG:4326", "-lco", "RS=NO", out, gml],
-                env={**os.environ, "GML_SKIP_RESOLVE_ELEMS": "ALL", "GML_EXPOSE_GML_ID": "NO"})
-            return out
-
-        with cf.ThreadPoolExecutor(3) as ex:
-            parts = list(ex.map(one, cells))
-        n = 0
-        with open(dest, "w", encoding="utf-8") as f:
-            for part in parts:
-                if part.exists():
-                    for line in open(part, encoding="utf-8"):
-                        if line.strip():
-                            f.write(line if line.endswith("\n") else line + "\n")
-                            n += 1
-                    part.unlink()
-                part.with_suffix(".gml").unlink(missing_ok=True)
-        got[layer] = n
+    # 1. Depth data: the FGDB download of Geonorge, converted layer by layer with ogr2ogr (OpenFileGDB),
+    #    clipped to the envelope. Layer names are matched case-insensitively (æ/ø/å included).
+    zip_url = C.NO_DEPTH_ZIP.get(C.REGION) or C.NO_DEPTH_ZIP["norway"]
+    zf = d / "dybdedata.zip"
+    http_get(zip_url, zf, tries=4, timeout=3600)
+    gdbs = subprocess.run(["unzip", "-Z1", str(zf)], capture_output=True, text=True, check=True).stdout.split()
+    gdb_dirs = sorted({p.split("/")[0] for p in gdbs if ".gdb/" in p})
+    if not gdb_dirs:
+        raise RuntimeError("no .gdb in %s: %s" % (zip_url, gdbs[:5]))
+    src = "/vsizip/%s/%s" % (zf, gdb_dirs[0])
+    info = subprocess.run(["ogrinfo", "-ro", "-q", src], capture_output=True, text=True, check=True).stdout
+    layers = [ln.split(":", 1)[1].strip().split(" (")[0] for ln in info.splitlines() if ln.strip() and ":" in ln]
+    got["fgdb_layers"] = layers
+    for want in C.NO_DEPTH_LAYERS:
+        key = want.lower().replace("æ", "ae").replace("ø", "o").replace("å", "a")
+        match = [l for l in layers if l.lower().replace("æ", "ae").replace("ø", "o").replace("å", "a").endswith(key)]
+        dest = d / (want + ".geojsonl")
+        if not match:
+            got[want] = "layer not found"
+            continue
+        run(["ogr2ogr", "-f", "GeoJSONSeq", "-overwrite", "-t_srs", "EPSG:4326", "-lco", "RS=NO",
+             "-spat", x0, y0, x1, y1, "-spat_srs", "EPSG:4326", "-nlt", "PROMOTE_TO_MULTI", dest, src, match[0]])
+        got[want] = sum(1 for _ in open(dest, encoding="utf-8"))
+    zf.unlink()
     # 2. Aids to navigation: GeoJSON pages of 2000, the whole country (the layers are small), with the
     #    attributes kept as they come; the build maps them to symbols.
     for layer in C.NO_AIDS_LAYERS:
@@ -300,7 +287,7 @@ def step_norway():
                     break
                 start += 2000
         got["aids_" + layer] = n
-    log_step("norway", depth_source=C.NO_DEPTH_WFS, aids_source=C.NO_AIDS_WFS, layers=got,
+    log_step("norway", depth_source=zip_url, aids_source=C.NO_AIDS_WFS, layers=got,
              licence="CC BY 4.0 (Kartverket, Sjøkart - Dybdedata); NLOD 2.0 (Kystverket, navigasjonsinstallasjoner)")
 
 

@@ -93,9 +93,14 @@ DE_TERRITORY = "Germany"
 
 # Norway: Kartverket depth data (WFS 2.0, GML only, no paging; CC BY 4.0) and the Norwegian Coastal
 # Administration's aids to navigation (ArcGIS WFS, GeoJSON, paging; NLOD 2.0)
-NO_DEPTH_WFS = "https://wfs.geonorge.no/skwms1/wfs.dybdedata"
+# The depth data comes as one FGDB download from Geonorge (the WFS serves GML only, without paging, and a
+# 1 x 0.5 degree window is already hundreds of MB); the Atom feed lists the national and county files.
+NO_DEPTH_ATOM = "https://nedlasting.geonorge.no/geonorge/ATOM-feeds/Dybdedata_AtomFeedFGDB.xml"
+NO_DEPTH_ZIP = {
+    "norway": "https://nedlasting.geonorge.no/geonorge/Basisdata/Dybdedata/FGDB/Basisdata_0000_Norge_4258_Dybdedata_FGDB.zip",
+    "probe-norway": "https://nedlasting.geonorge.no/geonorge/Basisdata/Dybdedata/FGDB/Basisdata_46_Vestland_25832_Dybdedata_FGDB.zip",
+}
 NO_DEPTH_LAYERS = ["Dybdeareal", "Dybdekurve", "Dybdepunkt", "Grunne", "Skjær", "Tørrfall"]
-NO_DEPTH_CELL = (1.0, 0.5)               # request window (degrees) for the un-paged GML service
 NO_AIDS_WFS = ("https://maps.kystverket.cloudgis.no/enterprise/services/PROD/nfs_sistop_ekstern_prod/"
                "MapServer/WFSServer")
 NO_AIDS_PREFIX = "nfs_sistop_ekstern_prod"
