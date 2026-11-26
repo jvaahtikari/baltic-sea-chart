@@ -1,0 +1,32 @@
+OK   Marine Regions IHO areas (one request)                  5 areas: Baltic Sea, Gulf of Bothnia, Gulf of Finland, Gulf of Riga, Kattegat
+OK   EMODnet        WCS capabilities                         coverage listed
+OK   Väylä          turvalaitteet_uusi                       35176 features
+OK   Väylä          loistot_uusi                             4891 features
+OK   Väylä          valosektorit_uusi                        6636 features
+OK   Väylä          navigointilinjat_uusi                    12887 features
+OK   Väylä          vaylaalueet_uusi                         3810 features
+OK   Väylä          taululinjat_uusi                         2632 features
+OK   Traficom       DepthArea_A                              149457 features
+OK   Traficom       DepthContour_L                           201767 features
+OK   Traficom       Sounding_P                               270002 features
+OK   osmdata        land polygons                            HTTP 200
+[estonia] {"source": "https://inspire.geoportaal.ee/geoserver/TN_veetransport/wfs", "layers": {"Beacon": 326, "Buoy": 1353, "FairwayArea": 31, "WaterwayLink": 96}, "licence": "Maa- ja Ruumiamet / Transpordiamet open data (CC BY 4.0 equivalent), fees: none", "fetched": "2026-11-26T22:37:53Z"}
+OK   Estonia        fetch + parse                            1679 marks, 754 with an IALA category; top: buoy/none 599, buoy/special 175, leading_mark/none 134, light/none 132, spar/port 75, spar/starboard 63, spar/east 53, spar/south 52
+[germany] {"source": "https://gdi.bsh.de/mapservice_gs/Seezeichen/wfs", "layers": {"Seezeichen:BOYLAT_boylat": 3760, "Seezeichen:BOYLAT_lights": 1271, "Seezeichen:BOYCAR_boycar": 767, "Seezeichen:BOYCAR_lights": 248, "Seezeichen:BOYISD_boyisd": 25, "Seezeichen:BOYISD_lights": 5, "Seezeichen:BOYSAW_boysaw": 212, "Seezeichen:BOYSAW_lights": 180, "Seezeichen:BOYSPP_boyspp": 1087, "Seezeichen:BOYSPP_lights": 551, "Seezeichen:BCNLAT_bcnlat": 1383, "Seezeichen:BCNLAT_lights": 208, "Seezeichen:BCNCAR_bcncar": 453, "Seezeichen:BCNCAR_lights": 8, "Seezeichen:BCNISD_bcnisd": 20, "Seezeichen:BCNISD_lights": 1, "Seezeichen:BCNSPP_bcnspp": 1262, "Seezeichen:BCNSPP_lights": 477, "Seezeichen:LNDMRK_lndmrk": 3973, "Seezeichen:LNDMRK_lights": 4552}, "licence": "GeoNutzV (Nutzungsbestimmungen für die Bereitstellung von Geodaten des Bundes), Quelle: © BSH; not to be used for navigation", "fetched": "2026-11-26T22:38:21Z"}
+OK   Germany (BSH)  fetch + parse                            9971 marks; top: None/None 2971, spar/port 2009, beacon/special 1262, buoy/starboard 1013, beacon/port 832, spar/starboard 720, light/none 700, spar/special 626; light labels e.g. IQ G 13s | Oc(3) G 12s | Q G 1s | Fl(2+1) G 15s | IQ R 13s | Fl(2) G 9s
+OK   OSM finland    extract available                        openstreetmap.fr
+OK   OSM sweden     extract available                        openstreetmap.fr
+OK   OSM denmark    extract available                        openstreetmap.fr
+OK   OSM estonia    extract available                        geofabrik
+OK   OSM latvia     extract available                        geofabrik
+OK   OSM lithuania  extract available                        geofabrik
+OK   OSM germany-mv extract available                        geofabrik
+OK   OSM germany-sh extract available                        geofabrik
+OK   OSM poland-pomorskie extract available                        openstreetmap.fr
+OK   OSM poland-zachodniopomorskie extract available                        openstreetmap.fr
+OK   OSM poland-warminsko-mazurskie extract available                        openstreetmap.fr
+OK   Overpass       overpass-api.de                          answers (1 elements)
+  retry 1/1 in 5s: https://overpass.private.coffee/api/interpreter (curl: (28) Operation timed out after 60001 milliseconds with 0 bytes received)
+warn Overpass       overpass.private.coffee                  download failed: https://overpass.private.coffee/api/interpreter: curl: (28) Operation timed out after 60001 milliseconds with 0 bytes received
+  retry 1/1 in 5s: https://overpass.kumi.systems/api/interpreter (curl: (28) Operation timed out after 60002 milliseconds with 0 bytes received)
+warn Overpass       overpass.kumi.systems                    download failed: https://overpass.kumi.systems/api/interpreter: curl: (28) Operation timed out after 60002 milliseconds with 0 bytes received
