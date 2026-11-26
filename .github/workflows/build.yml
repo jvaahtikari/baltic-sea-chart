@@ -16,6 +16,7 @@ on:
 
 permissions:
   contents: write     # run-log branch and the "latest" release
+  actions: write      # a probe run starts pages.yml at its end
   pages: write
   id-token: write
 
