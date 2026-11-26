@@ -40,12 +40,12 @@ const jobs = [
 ];
 for (const [name, lon, lat, z, base] of jobs) {
   await page.goto(`${base}#${z}/${lat}/${lon}`, { waitUntil: 'load' });
-  await page.waitForFunction(() => window.map && window.map.isStyleLoaded(), null, { timeout: 60000 }).catch(() => {});
+  await page.waitForFunction(() => window.map && typeof window.map.isStyleLoaded === 'function' && window.map.isStyleLoaded(), null, { timeout: 60000 }).catch(() => {});
   const t = Date.now();
   await page.waitForTimeout(base.includes('theme=dark') ? 1500 : 200);
-  await page.evaluate(() => new Promise(res => { const m = window.map; if (!m) return res(); if (m.loaded() && m.areTilesLoaded()) setTimeout(res, 300); else m.once('idle', () => setTimeout(res, 300)); setTimeout(res, 45000); }));
+  await page.evaluate(() => new Promise(res => { const m = window.map; if (!m || typeof m.loaded !== 'function') return res(); if (m.loaded() && m.areTilesLoaded()) setTimeout(res, 300); else m.once('idle', () => setTimeout(res, 300)); setTimeout(res, 45000); }));
   const counts = await page.evaluate(() => {
-    const m = window.map; if (!m) return {};
+    const m = window.map; if (!m || typeof m.queryRenderedFeatures !== 'function') return {};
     const c = {};
     for (const l of ['depth-area', 'depth-area-nat', 'depth-contour', 'land', 'seamark', 'light-flare', 'light-sector-arc', 'navline', 'fairway', 'hazard', 'sounding', 'danger-area', 'nodata'])
       c[l] = m.getLayer(l) ? m.queryRenderedFeatures({ layers: [l] }).length : -1;

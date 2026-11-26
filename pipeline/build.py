@@ -953,31 +953,45 @@ def step_marks():
                 w_mark.add(pt, {"kind": kind, "cat": cat, "name": p.get("navn"), "lit": False, "topmark": top,
                                 "src": "kystverket"}, minzoom=mark_minzoom(kind))
                 n_no["mark"] += 1
-        # Sectors: Sektorflate is the fan of each sector; its apex is the vertex nearest to a light.
+        # Sectors: Sektorflate is the fan of each sector (colour, limit bearings); the Sektorlinje lines
+        # with the same fksektorid run from the light to the sector's edge, so the light's position is
+        # the line end nearest to a light. The fan's own vertices are the fallback.
         if light_pts:
             ltree = shapely.STRtree([Point(x, y) for x, y in light_pts])
-            for ft in read_seq(nd / "aids_Sektorflate.geojsonl"):
+            ends = {}
+            for ft in read_seq(nd / "aids_Sektorlinje.geojsonl"):
                 g = shape(ft["geometry"]) if ft.get("geometry") else None
                 if g is None or g.is_empty:
+                    continue
+                for part in shapely.get_parts(g):
+                    xy = shapely.get_coordinates(part)
+                    if len(xy):
+                        ends.setdefault(str(ft["properties"].get("fksektorid")), []).extend([tuple(xy[0]), tuple(xy[-1])])
+
+            def apex(cands):
+                best, bestd = None, 1e9
+                for x, y in cands:
+                    v = Point(x, y)
+                    d_ = v.distance(ltree.geometries[ltree.nearest(v)])
+                    if d_ < bestd:
+                        best, bestd = v, d_
+                return best if best is not None and bestd <= 0.0015 else None   # within ~100 m of a light
+
+            for ft in read_seq(nd / "aids_Sektorflate.geojsonl"):
+                g = shape(ft["geometry"]) if ft.get("geometry") else None
+                if g is None or g.is_empty or not no_zone.contains(g.representative_point()):
                     continue
                 p = ft["properties"]
                 s0, s1 = num(p.get("retning_sektorlinje_1")), num(p.get("retning_sektorlinje_2"))
                 if s0 is None or s1 is None:
                     continue
-                verts = shapely.get_coordinates(g)
-                if len(verts) == 0 or not no_zone.contains(g.representative_point()):
-                    continue
-                vpts = [Point(x, y) for x, y in verts]
-                best, bestd = None, 1e9
-                for v in vpts:
-                    i = ltree.nearest(v)
-                    d_ = v.distance(ltree.geometries[i])
-                    if d_ < bestd:
-                        best, bestd = v, d_
-                if best is None or bestd > 0.0005:     # no light within ~50 m: not a light sector we know
+                key = str(p.get("fksektorid") or p.get("globalid"))
+                a = apex(ends.get(key, [])) or apex([tuple(c) for c in shapely.get_coordinates(g)])
+                if a is None:
+                    n_no["sector_unplaced"] = n_no.get("sector_unplaced", 0) + 1
                     continue
                 col = NO_COLOUR.get(str(p.get("lys_farge")), "W")
-                add_sectors(w_sect, best.x, best.y, [(s0, s1, col)], "no")
+                add_sectors(w_sect, a.x, a.y, [(s0, s1, col)], "no")
                 n_no["sector"] += 1
         LOG["norway_marks"] = n_no
 

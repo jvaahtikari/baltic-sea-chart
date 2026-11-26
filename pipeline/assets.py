@@ -13,7 +13,7 @@ from .style import style
 
 FONTS = ["Noto Sans Regular", "Noto Sans Italic"]
 # Latin-1, Latin Extended-A (Baltic and Nordic letters), general punctuation
-GLYPH_RANGES = ["0-255", "256-511", "8192-8447"]
+GLYPH_RANGES = ["0-255", "256-511", "8192-8447", "8448-8703", "8704-8959"]
 FONT_BASE = "https://raw.githubusercontent.com/protomaps/basemaps-assets/main/fonts/"
 
 SOURCES = [
